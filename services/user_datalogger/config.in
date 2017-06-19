@@ -1,0 +1,13 @@
+dep_bool_menu "Data Logger(EXPERIMENTAL)" DATA_LOGGER_SUPPORT $CONFIG_EXPERIMENTAL
+	choice '  Datalogger USART ' "$(usart_choice DATA_LOGGER)"
+	usart_process_choice DATA_LOGGER
+    
+    dep_bool "S0-Logger" DATA_LOGGER_S0
+    dep_bool_menu "Kaco-Logger" DATA_LOGGER_KACO
+        int    "Max Kaco Bus-ID" DATA_LOGGER_KACO_MAX 1
+    endmenu
+    
+    dep_bool "Vitodens-GWG" DATA_LOGGER_VITO
+endmenu
+
+

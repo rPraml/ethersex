@@ -105,7 +105,7 @@ SUBDIRS += services/vnc
 SUBDIRS += services/watchasync
 SUBDIRS += services/curtain
 SUBDIRS += services/glcdmenu
-
+SUBDIRS += services/user_datalogger
 rootbuild=t
 
 export TOPDIR
