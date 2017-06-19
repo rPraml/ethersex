@@ -1,0 +1,112 @@
+str_to_date("2 Aug 2011 23:06:01 +0200","%e %M %Y %H:%i")
+
+
+
+
+awk -F "," '{print "REPLACE INTO data_main VALUES (\
+    date(str_to_date(\"" $2 "\",\"%e %M %Y %H:%i\")), \
+    time(str_to_date(\"" $2 "\",\"%e %M %Y %H:%i\")), \
+    $6,$7,$8,$9,$10"}'
+
+SELECT Date, max(P_Pv) PV_Max,  max(P_Ac) AC_Max, max(Temp) Temp_Max, max(Produce) - min(Produce) FROM `data_wr1` GROUP By `Date`
+
+
+
+cat log.txt | awk -F "," '{print "REPLACE INTO data_main VALUES (\
+    date(str_to_date(\"" $2 "\",\"%e %M %Y %H:%i\")), \
+    time(str_to_date(\"" $2 "\",\"%e %M %Y %H:%i\")), \
+    "$6","$7","$8","$9","$10");"}' > log.sql
+
+cat log1.txt | awk -F "," '{print "REPLACE INTO data_wr1 VALUES (\
+    date(str_to_date(\"" $2 "\",\"%e %M %Y %H:%i\")), \
+    time(str_to_date(\"" $2 "\",\"%e %M %Y %H:%i\")), \
+    "$3","$4"/10,"$5"/100,"$6","$7"/10,"$8"/100,"$9","$10","$11");"}' > log1.sql
+
+
+cat log2.txt | awk -F "," '{print "REPLACE INTO data_wr2 VALUES (\
+    date(str_to_date(\"" $2 "\",\"%e %M %Y %H:%i\")), \
+    time(str_to_date(\"" $2 "\",\"%e %M %Y %H:%i\")), \
+    "$3","$4"/10,"$5"/100,"$6","$7"/10,"$8"/100,"$9","$10","$11");"}' > log2.sql
+
+cat log3.txt | awk -F "," '{print "REPLACE INTO data_wr3 VALUES (\
+    date(str_to_date(\"" $2 "\",\"%e %M %Y %H:%i\")), \
+    time(str_to_date(\"" $2 "\",\"%e %M %Y %H:%i\")), \
+    "$3","$4"/10,"$5"/100,"$6","$7"/10,"$8"/100,"$9","$10","$11");"}' > log3.sql
+    
+    
+
+
+SELECT `Date`, max(P_Pv) PV_Max,  max(P_Ac) AC_Max, max(Temp) Temp_Max, 
+max(Produce) - min(Produce) Produce,
+max(if(hour(`Time`)=0,Produce, null)) - min(if(hour(`Time`)=0,Produce, null)) P0,
+max(if(hour(`Time`)=1,Produce, null)) - min(if(hour(`Time`)=1,Produce, null)) P1,
+max(if(hour(`Time`)=2,Produce, null)) - min(if(hour(`Time`)=2,Produce, null)) P2,
+max(if(hour(`Time`)=3,Produce, null)) - min(if(hour(`Time`)=3,Produce, null)) P3,
+max(if(hour(`Time`)=4,Produce, null)) - min(if(hour(`Time`)=4,Produce, null)) P4,
+max(if(hour(`Time`)=5,Produce, null)) - min(if(hour(`Time`)=5,Produce, null)) P5,
+max(if(hour(`Time`)=6,Produce, null)) - min(if(hour(`Time`)=6,Produce, null)) P6,
+max(if(hour(`Time`)=7,Produce, null)) - min(if(hour(`Time`)=7,Produce, null)) P7,
+max(if(hour(`Time`)=8,Produce, null)) - min(if(hour(`Time`)=8,Produce, null)) P8,
+max(if(hour(`Time`)=9,Produce, null)) - min(if(hour(`Time`)=9,Produce, null)) P9,
+max(if(hour(`Time`)=10,Produce, null)) - min(if(hour(`Time`)=10,Produce, null)) P10,
+max(if(hour(`Time`)=11,Produce, null)) - min(if(hour(`Time`)=11,Produce, null)) P11,
+max(if(hour(`Time`)=12,Produce, null)) - min(if(hour(`Time`)=12,Produce, null)) P12,
+max(if(hour(`Time`)=13,Produce, null)) - min(if(hour(`Time`)=13,Produce, null)) P13,
+max(if(hour(`Time`)=14,Produce, null)) - min(if(hour(`Time`)=14,Produce, null)) P14,
+max(if(hour(`Time`)=15,Produce, null)) - min(if(hour(`Time`)=15,Produce, null)) P15,
+max(if(hour(`Time`)=16,Produce, null)) - min(if(hour(`Time`)=16,Produce, null)) P16,
+max(if(hour(`Time`)=17,Produce, null)) - min(if(hour(`Time`)=17,Produce, null)) P17,
+max(if(hour(`Time`)=18,Produce, null)) - min(if(hour(`Time`)=18,Produce, null)) P18,
+max(if(hour(`Time`)=19,Produce, null)) - min(if(hour(`Time`)=19,Produce, null)) P19,
+max(if(hour(`Time`)=20,Produce, null)) - min(if(hour(`Time`)=20,Produce, null)) P20,
+max(if(hour(`Time`)=21,Produce, null)) - min(if(hour(`Time`)=21,Produce, null)) P21,
+max(if(hour(`Time`)=22,Produce, null)) - min(if(hour(`Time`)=22,Produce, null)) P22,
+max(if(hour(`Time`)=23,Produce, null)) - min(if(hour(`Time`)=23,Produce, null)) P23
+FROM `data_wr1` GROUP By `Date`    
+
+
+
+
+DATE Hour Consume_KWH Delivered_KWH WR1_WH1 WR2_WH WR3_WH 
+Peak P_PV1 P_AC1 Temp1 
+
+
+create or replace view zaehler as (SELECT `Date`, sum(s.Consume_Kwh) as Consume_Kwh,
+sum(s.Delivered_Kwh) as Delivered_Kwh,
+sum(s.WR1_Kwh + s.WR2_Kwh + s.WR3_Kwh) as Produced_Kwh,
+sum(s.WR1_Kwh + s.WR2_Kwh + s.WR3_Kwh - s.Delivered_Kwh) as Eigenverbrauch_Kwh,
+sum(s.WR1_Kwh + s.WR2_Kwh + s.WR3_Kwh - s.Delivered_Kwh + s.Consume_Kwh) as Gesamtverbrauch_Kwh,
+sum(WR1_Kwh) WR1_Kwh,
+sum(WR2_Kwh) WR2_Kwh,
+sum(WR3_Kwh) WR3_Kwh
+ FROM `stats` s );
+ 
+create or replace view zaehler_d as (SELECT `Date`, sum(s.Consume_Kwh) as Consume_Kwh,
+sum(s.Delivered_Kwh) as Delivered_Kwh,
+sum(s.WR1_Kwh + s.WR2_Kwh + s.WR3_Kwh) as Produced_Kwh,
+sum(s.WR1_Kwh + s.WR2_Kwh + s.WR3_Kwh - s.Delivered_Kwh) as Eigenverbrauch_Kwh,
+sum(s.WR1_Kwh + s.WR2_Kwh + s.WR3_Kwh - s.Delivered_Kwh + s.Consume_Kwh) as Gesamtverbrauch_Kwh,
+sum(WR1_Kwh) WR1_Kwh,
+sum(WR2_Kwh) WR2_Kwh,
+sum(WR3_Kwh) WR3_Kwh
+ FROM `stats` s group by s.`date`);
+
+create or replace view zaehler_m as (SELECT min(`Date`), sum(s.Consume_Kwh) as Consume_Kwh,
+sum(s.Delivered_Kwh) as Delivered_Kwh,
+sum(s.WR1_Kwh + s.WR2_Kwh + s.WR3_Kwh) as Produced_Kwh,
+sum(s.WR1_Kwh + s.WR2_Kwh + s.WR3_Kwh - s.Delivered_Kwh) as Eigenverbrauch_Kwh,
+sum(s.WR1_Kwh + s.WR2_Kwh + s.WR3_Kwh - s.Delivered_Kwh + s.Consume_Kwh) as Gesamtverbrauch_Kwh,
+sum(WR1_Kwh) WR1_Kwh,
+sum(WR2_Kwh) WR2_Kwh,
+sum(WR3_Kwh) WR3_Kwh
+ FROM `stats` s group by year(s.`date`), month(`Date`));
+
+create or replace view zaehler_y as (SELECT min(`Date`), sum(s.Consume_Kwh) as Consume_Kwh,
+sum(s.Delivered_Kwh) as Delivered_Kwh,
+sum(s.WR1_Kwh + s.WR2_Kwh + s.WR3_Kwh) as Produced_Kwh,
+sum(s.WR1_Kwh + s.WR2_Kwh + s.WR3_Kwh - s.Delivered_Kwh) as Eigenverbrauch_Kwh,
+sum(s.WR1_Kwh + s.WR2_Kwh + s.WR3_Kwh - s.Delivered_Kwh + s.Consume_Kwh) as Gesamtverbrauch_Kwh,
+sum(WR1_Kwh) WR1_Kwh,
+sum(WR2_Kwh) WR2_Kwh,
+sum(WR3_Kwh) WR3_Kwh
+ FROM `stats` s group by year(s.`date`));
