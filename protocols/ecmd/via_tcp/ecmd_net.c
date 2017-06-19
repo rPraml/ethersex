@@ -254,7 +254,7 @@ void ecmd_net_main(void)
             }
 
             if (l > 0) {
-                state->outbuf[l++] = '\n';
+                if (state->outbuf[l] != ECMD_NO_NEWLINE) state->outbuf[l++] = '\n';
                 state->out_len = l;
             }
         }
