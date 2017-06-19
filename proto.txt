@@ -1,0 +1,28 @@
+*020   3 483.0  0.21   100 232.1  2.27    96  34  15460 s 4400I<\0>
+
+
+*0%c0 %u %f %f %u %f %f %u %u %lu 
+
+
+1: WR-Addr (char)
+2: status
+3: PV-Spg
+4: PV-Strom
+5: PV-Leistung
+6: AC-Spg
+7: AC-Strom
+8: Eingespeiste Leistung
+9: Temp
+10: Tagesenergie
+
+
+*013  4143  14936    855    855     14:00     97:59     97:59
+
+*0%c3 %u %lu %u %u %u:%u
+1: WR-Addr (char)
+2: PMax
+3: Tagesenergie
+3: ?
+4: ?
+5: hh
+6: mm
