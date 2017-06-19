@@ -36,8 +36,7 @@ extern volatile uint8_t newtick;
 uint8_t milliticks;
 
 void periodic_init(void) {
-
-#ifdef CLOCK_CPU_SUPPORT
+#if defined(CLOCK_CPU_SUPPORT) || defined(DATA_LOGGER_SUPPORT)
 	/* init timer1 to expire after ~20ms, with Normal */
 	TCCR1B = CLOCK_PRESCALER_MASK;
 	TCNT1 = 65536-CLOCK_SECONDS;
@@ -55,7 +54,7 @@ void periodic_init(void) {
 
 ISR(TIMER1_COMPA_vect)
 {
-#ifdef CLOCK_CPU_SUPPORT
+#if defined(CLOCK_CPU_SUPPORT) || defined(DATA_LOGGER_SUPPORT)
 	OCR1A += CLOCK_TICKS;
 #endif
 	newtick = 1;

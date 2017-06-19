@@ -77,7 +77,7 @@ stella_init (void)
 	stella_loadFromEEROMFading();
 	#endif
 	#if STELLA_START == stella_start_all
-	memset(stella_fade, 255, sizeof(stella_fade));
+//	memset(stella_fade, 255, sizeof(stella_fade));
 	#endif
 
 	stella_sort();
@@ -291,9 +291,10 @@ stella_sort()
 			cal_table->channel[i].port.port = &STELLA_PORT2;
 		}
 		#endif
+	
+		#ifdef STELLA_NORMAL
 		cal_table->channel[i].value = 255 - stella_brightness[i];
 		cal_table->channel[i].next = 0;
-
 		/* Special case: 0% brightness (Don't include this channel!) */
 		if (stella_brightness[i] == 0) continue;
 
@@ -312,7 +313,28 @@ stella_sort()
 			#endif
 			continue;
 		}
+		#else
+		cal_table->channel[i].value = stella_brightness[i];
+		cal_table->channel[i].next = 0;
+		/* Special case: 100% brightness (Don't include this channel!) */
+		if (stella_brightness[i] == 255) continue;
 
+		//cal_table->portmask |= _BV(i+STELLA_OFFSET);
+
+		/* Special case: 0% brightness (Merge pwm cycle start masks! Don't include this channel!) */
+		if (stella_brightness[i] == 0)
+		{
+			#ifdef STELLA_PINS_PORT2
+			if (i>=STELLA_PINS_PORT1)
+				cal_table->port[1].mask |= _BV( (i-STELLA_PINS_PORT1) +STELLA_OFFSET_PORT2);
+			else
+				cal_table->port[0].mask |= _BV(i+STELLA_OFFSET_PORT1);
+			#else
+				cal_table->port[0].mask |= _BV(i+STELLA_OFFSET_PORT1);
+			#endif
+			continue;
+		}
+                #endif
 		/* first item in linked list */
 		if (!cal_table->head)
 		{

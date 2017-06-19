@@ -1935,7 +1935,7 @@ uip_send(const void *data, int len)
   -- Ethersex META --
   header(protocols/uip/uip.h)
   header(protocols/uip/uip_router.h)
-  timer(10, ` 
+  timer(8, ` 
 #       if UIP_CONNS <= 255
             uint8_t i;
 #       else
