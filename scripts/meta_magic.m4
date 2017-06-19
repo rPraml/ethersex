@@ -166,7 +166,7 @@ dnl
 define(`pushdivert', `define(`_old_divert', divnum)')
 define(`popdivert', `divert(_old_divert)')
 define(`timer_divert_base', timer_divert)
-define(`timer_divert_last', 500)
+define(`timer_divert_last', 1024)
 define(`timer_divert_start', `divert(eval(timer_divert_base` + $1 * 2'))$2')
 define(`timer_divert_end', `divert(eval(timer_divert_base` + $1 * 2 + 1'))$2')
 define(`_divert_used', `ifelse(eval(`$1 > 'timer_divert_last), `1', `errprint(`timer_meta: Too big timer $1
