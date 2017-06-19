@@ -32,12 +32,21 @@
 #include "config.h"
 
 
+#if defined(ENC28J60_SUPPORT) \
+	|| defined(DATAFLASH_SUPPORT) || defined(RFM12_INT_PIN)
 /* Prologue/epilogue macros, disabling/enabling interrupts. 
    Be careful, these are not well suited to be used as if-blocks. */
-#define rfm12_prologue()			\
-  uint8_t sreg = SREG; cli();
-#define rfm12_epilogue()			\
-  SREG = sreg;
+    #define rfm12_prologue()			\
+      uint8_t sreg = SREG; cli();
+    #define rfm12_epilogue()			\
+      SREG = sreg;
+#else
+    /* If there is no other device on the SPI-bus and we are in polling mode there's no need to disable interrupts
+    (needed to support stella-ligt */
+    #define rfm12_prologue()	do { } while(0)
+    #define rfm12_epilogue()	do { } while(0)
+#endif
+
 
 
 // initialize module
