@@ -5,4 +5,6 @@ int16_t kaco_process_rx(uint8_t ch);
 void kaco_process_rx_err(void);
 int16_t kaco_init(void);
 int32_t kaco_get_total_power();
+int16_t kaco_ecmd_status(char *cmd, char *output, uint16_t len);
+
 #endif

@@ -50,7 +50,8 @@ usart_rx_get() {
 // ISR-Routinen
 ISR(usart(USART,_RX_vect)) {
 	/* Ignore errors */
-	if ((usart(UCSR,A) & _BV(usart(DOR))) || (usart(UCSR,A) & _BV(usart(FE)))) {
+	uint8_t flags = usart(UCSR,A);
+	if ((flags & _BV(usart(DOR))) || (usart(UCSR,A) & _BV(usart(FE)))) {
 		uint8_t v = usart(UDR);
 		(void) v;
 		return;
