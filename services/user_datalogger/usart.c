@@ -110,15 +110,15 @@ void usart_setbaud(uint16_t baud, uint8_t charSize, char parity, uint8_t stopbit
 	cli();
 	uint8_t out;
 	switch(parity) {
-		case 'E': out |= (1 << UPM1); break;
-		case 'O': out |= (1 << UPM1) | (1 << UPM0) ;
+		case 'E': out |= (1 << usart(UPM,1)); break;
+		case 'O': out |= (1 << usart(UPM,1)) | (1 << usart(UPM,0)) ;
 	}
 	switch (charSize) {
-		case 7: out |= (1 << UCSZ1) ;	break;
-		case 8: out |= (1 << UCSZ1) | (1 << UCSZ0);	break;
+		case 7: out |= (1 << usart(UCSZ,1)) ;	break;
+		case 8: out |= (1 << usart(UCSZ,1)) | (1 << usart(UCSZ,0));	break;
 	}
-	if (stopbits == 2) out |= (1 << USBS);
-	usart(UCSR, C) = (1 << URSEL) | out;
+	if (stopbits == 2) out |= (1 << usart(USBS));
+	usart(UCSR, C) = _BV_URSEL | out;
 	usart(UBRR,H) = (baud >> 8);
 	usart(UBRR,L) = (baud & 0xFF); 
 	SREG = sreg;

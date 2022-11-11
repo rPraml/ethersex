@@ -90,10 +90,10 @@ void s0_capture() {
 	cap.i8m = ICR1H;
 	
 	// overflow verpasst, wenn ICR1H klein und wartender Overflow Interrupt
-	if ((cap.i8m < 128) && (TIFR & (1<<TOV1))) {
+	if ((cap.i8m < 128) && (TIFR0 & (1<<TOV1))) {
 		// wartenden timer overflow Interrupt vorziehen
 		++softtimer;
-		TIFR = (1<<TOV1);    // timer overflow int. löschen, da schon hier ausgeführt
+		TIFR0 = (1<<TOV1);    // timer overflow int. löschen, da schon hier ausgeführt
 	}
 	cap.high = softtimer;    // obere 16 Bit aus Software Zähler
 

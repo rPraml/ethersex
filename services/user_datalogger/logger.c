@@ -65,7 +65,7 @@ void (*datalogger_rx_errback)();
 
 // Zeitmessungen für die S0-Pulsauswertung
 static volatile uint8_t block_zeitmessung;
-ISR(TIMER1_OVF_vect) { 	   // Timer1 Überlauf
+void datalogger_tick() { 	   // Timer1 Überlauf
 	// timer = 1,7578125 Hz, t = 0,56888sec;
 	if (timeout_counter)  timeout_counter--;
 #ifdef DATA_LOGGER_S0
@@ -97,10 +97,10 @@ void datalogger_setmode(uint8_t state) {
 		PIN_SET(DATALOGGER_RS485_RX_DISABLE);
 		PIN_CLEAR(DATALOGGER_S0_MODE);
 #ifdef DATA_LOGGER_S0    
-		TIMSK |= (1<<TOIE1) | (1<<TICIE1);   // overflow und Input-capture aktivieren, Mega32: TIMSK
+		TIMSK0 |= (1<<TOIE1) | (1<<ICIE1);   // overflow und Input-capture aktivieren, Mega32: TIMSK
 		TCCR1B |= (1<<ICNC1) + (1 << ICES1);
 #else
-		TIMSK |= (1<<TOIE1);   // overflow und Input-capture aktivieren, Mega32: TIMSK
+		TIMSK0 |= (1<<TOIE1);   // overflow und Input-capture aktivieren, Mega32: TIMSK
 #endif
 		TCCR1A = 0;                      // normal mode, keine PWM Ausgänge
 		PIN_SET(STATUSLED_DATALOGGER_ACT);
@@ -110,7 +110,7 @@ void datalogger_setmode(uint8_t state) {
 #ifdef DATA_LOGGER_S0    
 	case DATALOGGER_STATE_TX_S0:
 		PIN_CLEAR(STATUSLED_S0_ACT);
-		TIMSK &= ~(1<<TICIE1);
+		TIMSK0 &= ~(1<<ICIE1);
 		PIN_CLEAR(DATALOGGER_VIESS_MODE);
 		PIN_CLEAR(DATALOGGER_RS485_TX_ENABLE);
 		PIN_SET(DATALOGGER_RS485_RX_DISABLE);
@@ -121,7 +121,7 @@ void datalogger_setmode(uint8_t state) {
 #ifdef DATA_LOGGER_VITO
 	case DATALOGGER_STATE_TX_VITO:
 		PIN_CLEAR(STATUSLED_DATALOGGER_ACT);
-		TIMSK &= ~(1<<TICIE1);
+		TIMSK0 &= ~(1<<ICIE1);
 		PIN_SET(DATALOGGER_VIESS_MODE);
 		PIN_CLEAR(DATALOGGER_RS485_TX_ENABLE);
 		PIN_SET(DATALOGGER_RS485_RX_DISABLE);
@@ -132,7 +132,7 @@ void datalogger_setmode(uint8_t state) {
 #ifdef DATA_LOGGER_KACO
     case DATALOGGER_STATE_TX_KACO:
 		PIN_CLEAR(STATUSLED_DATALOGGER_ACT);
-		TIMSK &= ~(1<<TICIE1);
+		TIMSK0 &= ~(1<<ICIE1);
 		PIN_CLEAR(DATALOGGER_VIESS_MODE);
 		PIN_SET(DATALOGGER_RS485_TX_ENABLE);
 		PIN_SET(DATALOGGER_RS485_RX_DISABLE);
@@ -254,5 +254,6 @@ datalogger_periodic(void) {
   header(services/user_datalogger/datalogger.h)
   mainloop(datalogger_mainloop)
   timer(128,datalogger_periodic())
+  periodic_milliticks_isr(datalogger_tick())
   init(datalogger_init)
 */
