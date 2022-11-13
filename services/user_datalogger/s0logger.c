@@ -1,4 +1,5 @@
 #include <avr/pgmspace.h>
+#include <avr/interrupt.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -69,7 +70,12 @@ static uint16_t s0_powerRevTick;
 
 volatile uint16_t statusled;
 
+void s0_init() {
+	TCCR1B |= _BV(ICNC1) | _BV(ICES1);   // NoiseCanceler + EdgeSelect
+}
+
 void s0_ovfTick() {
+
 	++softtimer; 		   // zählen der Überläufe
 	if (block_zeitmessung) block_zeitmessung--;
 	if (s0_powerFwdTick < TICS_MAX) s0_powerFwdTick++;
@@ -81,19 +87,22 @@ void s0_ovfTick() {
     }
 }
 
-void s0_capture() {
-    
-    statusled=2;
-    convert32to8 cap;        // Variablendeklaration
+ISR(TIMER1_CAPT_vect)
+{    //  Flanke an ICP pin
+	// Wird immer pro Wattstunde aufgerufen.
+	// Wir müssen die Zeit zwischen 2 Impulsen stoppen, so dass wir die Leistung ausrechnen können
+	// 
+    statusled = 2;
 
+    convert32to8 cap;        // Variablendeklaration
 	cap.i8l = ICR1L;         // low Byte zuerst, high Byte wird gepuffert
 	cap.i8m = ICR1H;
 	
 	// overflow verpasst, wenn ICR1H klein und wartender Overflow Interrupt
-	if ((cap.i8m < 128) && (TIFR0 & (1<<TOV1))) {
+	if ((cap.i8m < 128) && (TIFR1 & _BV(TOV1))) {
 		// wartenden timer overflow Interrupt vorziehen
 		++softtimer;
-		TIFR0 = (1<<TOV1);    // timer overflow int. löschen, da schon hier ausgeführt
+		TIFR1 = _BV(TOV1);    // timer overflow int. löschen, da schon hier ausgeführt
 	}
 	cap.high = softtimer;    // obere 16 Bit aus Software Zähler
 
@@ -113,12 +122,12 @@ void s0_start() {
 	datalogger_rx_state = 0;
 	block_zeitmessung = 10;
 	
-	memcpy_P(usart_tx_buffer(), PSTR("/?!\r\n"),5); //
+	memcpy_P(usart_tx_buffer(), PSTR("/?!\r\n"),5); // Initialisierung
 	usart_setbaud(BAUDRATE(300),7,'E',1);
 	usart_tx_start(5, NULL); // transmit 5 chars from buffer
 }
 int s0_ready() {
-    return pulse > 4;
+    return 1; //pulse > 4;
 }
 /**
  * @return -1 wenn Fertig, 0 wenn nochmal, > 0 Dauer
@@ -131,7 +140,7 @@ int16_t s0_process_rx(uint8_t ch) {
 	}
 	if (ch == 3) { // ETX
 		s0_status.online = CONVERT_OK;
-		return -1;
+		return -1; // Fertig
 	}
 	uint16_t tmp_lo;
 	uint32_t tmp_hi, delta;
@@ -143,7 +152,6 @@ int16_t s0_process_rx(uint8_t ch) {
 
 	switch (datalogger_rx_state) {
 	case 0:
-		//strncpy(datalogger_ident, datalogger_scratch, sizeof(datalogger_ident) );
 		_delay_ms(50);
 		memcpy_P(usart_tx_buffer(), PSTR("\x06""000\r\n"),6); // copy init sequence into buffer
 		usart_tx_start(6, NULL);
@@ -156,6 +164,7 @@ int16_t s0_process_rx(uint8_t ch) {
 		sscanf_P(line, PSTR("C.5.0(%x)"), 	&s0_status.statusFlag);
 		s0_status.watt = (uint32_t)(F_CPU/64*3600) / (uint32_t)zeitdifferenz * pulse;
 		if (s0_status.statusFlag & 0x01) s0_status.watt *=  -1;
+		
 		if (sscanf_P(line, PSTR("1.8.0(%lu.%1u*"), &tmp_hi, &tmp_lo) == 2) {
 			tmp_hi = tmp_hi * 10 + tmp_lo;
 			s0_status.energyFwd = tmp_hi;
@@ -261,3 +270,10 @@ s0_ecmd_status(char *cmd, char *output, uint16_t len) {
 	}
 	return ECMD_FINAL_OK;
 }
+
+/*
+  -- Ethersex META --
+  header(services/user_datalogger/s0logger.h)
+  init(s0_init)
+*/
+

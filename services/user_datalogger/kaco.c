@@ -1,6 +1,8 @@
 /*
  * Copyright (c) 2011 Roland Praml pram@gmx.de
  *
+ * Parser for KACO Powador 3600
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 3 of the License, or
@@ -26,6 +28,7 @@
 #include <util/delay.h>
 #include <util/parity.h>
 #include "config.h"
+#include "datalogger.h"
 #include "protocols/ecmd/ecmd-base.h"
 
 
@@ -51,47 +54,50 @@ static kaco_t kaco_status[DATA_LOGGER_KACO_MAX];
 
 
 void kaco_rx_485(void) {
-    PIN_CLEAR(DATALOGGER_RS485_TX_ENABLE);
-	PIN_CLEAR(DATALOGGER_RS485_RX_DISABLE);
+    RS485_RX();
 }
+
 void kaco_start(int id) {
     if (id < 1 || id > DATA_LOGGER_KACO_MAX) return;
     kaco_id = id;
 	util_readline('\n', READLINE_CRLF); // to reset buffer
-	sprintf_P(usart_tx_buffer(), PSTR("#%02d0\r"),id); // send request
-	usart_setbaud(BAUDRATE(9600),8,'N',1);
-	usart_tx_start(5, kaco_rx_485); // transmit 5 chars from buffer
+	sprintf_P(usart_tx_buffer(), PSTR("#%02d0\r"), id); // send request
+	usart_setbaud(BAUDRATE(9600), 8, 'N', 1);
+	usart_tx_start(5, kaco_rx_485); // transmit 5 chars from buffer and switch to RX
 }
+
 /**
  * @return -1 wenn Fertig, 0 wenn nochmal, > 0 Dauer
  **/
 int16_t kaco_process_rx(uint8_t ch) {
 	char * line = util_readline(ch, READLINE_NUL);
-    //if (!kaco_active) return -1;
     
     if (!line) {
-        return 0; // no line yet there
+        return CONTINUE; // no line yet there
     }
+	
     int status, temp;
     int pv_u_hi, pv_u_lo, pv_i_hi, pv_i_lo, pv_p;
     int ac_u_hi, ac_u_lo, ac_i_hi, ac_i_lo, ac_p;
     int32_t total;
-    
-    //                          id  st pv_u  pv_i pv_p ac_u  ac_i ac_p t total
     uint8_t crc, crc_i, id;
+	
     crc = 0;
     for(id = 1; id < 57; id++) crc += line[id];
-    if (sscanf_P(line, PSTR("\n*0%c0 %d %d.%d %d.%d %d %d.%d %d.%d %d %u %ld %c"), &id, &status, &pv_u_hi, &pv_u_lo, &pv_i_hi, &pv_i_lo, &pv_p,
-    &ac_u_hi, &ac_u_lo, &ac_i_hi, &ac_i_lo, &ac_p, &temp, &total, &crc_i)==15) {
-        id-= '1';
+    if (sscanf_P(line, PSTR("\n*0%c0 %d %d.%d %d.%d %d %d.%d %d.%d %d %u %ld %c"), 
+			&id, &status, 
+			&pv_u_hi, &pv_u_lo, &pv_i_hi, &pv_i_lo, &pv_p,
+			&ac_u_hi, &ac_u_lo, &ac_i_hi, &ac_i_lo, &ac_p, 
+			&temp, &total, &crc_i) == 15) {
+        id -= '1';
         id = kaco_id - 1;
-        if (id != (kaco_id-1)) {
-            kaco_status[kaco_id-1].status = -11; // CRC
-            return -1;
+        if (id != (kaco_id - 1)) {
+            kaco_status[kaco_id - 1].status = -11; // CRC
+            return FINISH_ERR;
         }
         if (crc_i != crc) {
-            kaco_status[kaco_id-1].status = -10; // CRC
-            return -1;
+            kaco_status[kaco_id - 1].status = -10; // CRC
+            return FINISH_ERR;
         }
         kaco_status[id].status = status;
         kaco_status[id].pv_u = pv_u_hi*10 + pv_u_lo;
@@ -103,16 +109,14 @@ int16_t kaco_process_rx(uint8_t ch) {
         kaco_status[id].temp = temp;
         kaco_status[id].total = total;
     } else {
-        kaco_status[kaco_id-1].status = -12; // CRC
-        return -1;
+        kaco_status[kaco_id - 1].status = -12; // CRC
+        return FINISH_ERR; // Error
     }
-    //kaco_active = 0;
-	return -1; // finish
+	return FINISH_OK; // finish
 }
 
 void kaco_process_rx_err(void) {
-    kaco_status[kaco_id-1].status = -2; //offline
-	//kaco_active->status = -2;
+    kaco_status[kaco_id - 1].status = -2; //offline
 }
 
 
@@ -130,8 +134,9 @@ int32_t kaco_get_total_power() {
 
 int16_t
 kaco_ecmd_status(char *cmd, char *output, uint16_t len) {
-	static uint8_t line;
+		static uint8_t line;
     static int id;
+	
 	if (cmd[0] != 23) {
         sscanf_P(cmd, PSTR("%d"), &id);
         if (id < 1 || id > DATA_LOGGER_KACO_MAX) return ECMD_ERR_PARSE_ERROR;
@@ -169,11 +174,9 @@ kaco_ecmd_status(char *cmd, char *output, uint16_t len) {
     return ECMD_FINAL_OK;
 }
 
-int16_t
+void
 kaco_init(void) {
-    int i;
-    for (i = 0; i < DATA_LOGGER_KACO_MAX; i++) kaco_status[i].status = -1;
-	return 0;
+    for (int i = 0; i < DATA_LOGGER_KACO_MAX; i++) kaco_status[i].status = -1;
 }
 /*
   -- Ethersex META --

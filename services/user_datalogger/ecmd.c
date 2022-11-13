@@ -28,8 +28,9 @@
 #include <util/delay.h>
 
 #include "config.h"
-#include "datalogger.h"
+#include "vito.h"
 #include "s0logger.h"
+#include "kaco.h"
 #include "protocols/ecmd/ecmd-base.h"
 
 

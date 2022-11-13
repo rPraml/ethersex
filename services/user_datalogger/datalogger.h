@@ -29,17 +29,20 @@ int16_t datalogger_vito_ecmd(char *cmd, char *output, uint16_t len);
 int16_t
 datalogger_status(char *cmd, char *output, uint16_t len);
 
-int16_t
-datalogger_init(void);
 
-int16_t
+void
 datalogger_periodic(void);
+
+void
+datalogger_timeout(void);
 
 int16_t
 datalogger_mainloop(void);
 
 
-
+#define CONTINUE 0
+#define FINISH_OK -1
+#define FINISH_ERR -2
 
 #include "config.h"
 #ifdef DEBUG_DATA_LOGGER

@@ -9,6 +9,8 @@
 #define USE_USART DATA_LOGGER_USE_USART
 #include "usart.h"
 
+
+
 volatile unsigned int vito_timeout_counter;
 void vito_ovfTick(void) {
     if (vito_timeout_counter)  vito_timeout_counter--;
@@ -42,7 +44,7 @@ int16_t vito_getData(int mode, uint16_t addr, int len, uint32_t data, char *buf)
 
 	int16_t ch,i, datalen;
 	if (!vito_sync()) return -1;
-	uint8_t *ptr = usart_tx_buffer();
+	char *ptr = usart_tx_buffer();
 	*ptr++ = 0x01;
 	*ptr++ = mode;
 	*ptr++ = addr;

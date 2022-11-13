@@ -26,9 +26,10 @@
 #include <string.h>
 #include <avr/interrupt.h>
 #include <util/delay.h>
+#include <util/atomic.h>
 #include "config.h"
 #include "datalogger.h"
-
+#include "core/periodic.h"
 #include "protocols/ecmd/ecmd-base.h"
 
 #define USE_USART DATA_LOGGER_USE_USART
@@ -54,109 +55,78 @@
 
 
 volatile unsigned int timeout_counter;
-volatile uint8_t datalogger_state, on_tx_complete_state;
-void datalogger_setmode(uint8_t state);
 
-
+volatile uint8_t datalogger_state;
 
 int16_t (*datalogger_rx_callback)(uint8_t ch);
+
 void (*datalogger_rx_errback)();
 
 
-// Zeitmessungen für die S0-Pulsauswertung
-static volatile uint8_t block_zeitmessung;
-void datalogger_tick() { 	   // Timer1 Überlauf
-	// timer = 1,7578125 Hz, t = 0,56888sec;
-	if (timeout_counter)  timeout_counter--;
-#ifdef DATA_LOGGER_S0
-	s0_ovfTick();
-#endif
-#ifdef DATA_LOGGER_VITO
-    vito_ovfTick();
-#endif
-
-}
-
-#ifdef DATA_LOGGER_S0
-ISR(TIMER1_CAPT_vect) {    //  Flanke an ICP pin
-	s0_capture();
-}
-#endif
-
-
 void datalogger_setmode(uint8_t state) {
-	uint8_t sreg = SREG;
-	cli();
-	datalogger_state = state;
-	switch (datalogger_state) {
-	case DATALOGGER_STATE_IDLE:
-		datalogger_rx_callback = NULL;
-		datalogger_rx_errback = NULL;
-		PIN_CLEAR(DATALOGGER_VIESS_MODE);
-		PIN_CLEAR(DATALOGGER_RS485_TX_ENABLE);
-		PIN_SET(DATALOGGER_RS485_RX_DISABLE);
-		PIN_CLEAR(DATALOGGER_S0_MODE);
-#ifdef DATA_LOGGER_S0    
-		TIMSK0 |= (1<<TOIE1) | (1<<ICIE1);   // overflow und Input-capture aktivieren, Mega32: TIMSK
-		TCCR1B |= (1<<ICNC1) + (1 << ICES1);
-#else
-		TIMSK0 |= (1<<TOIE1);   // overflow und Input-capture aktivieren, Mega32: TIMSK
+	ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
+	{
+		datalogger_state = state;
+		switch (datalogger_state) {
+		case DATALOGGER_STATE_IDLE:
+			datalogger_rx_callback = NULL;
+			datalogger_rx_errback = NULL;
+#ifdef DATA_LOGGER_S0 
+			S0_OFF();
 #endif
-		TCCR1A = 0;                      // normal mode, keine PWM Ausgänge
-		PIN_SET(STATUSLED_DATALOGGER_ACT);
-        PIN_SET(STATUSLED_S0_ACT);
-		break;
+#ifdef DATA_LOGGER_VITO
+			VITO_OFF();
+#endif			
+#ifdef DATA_LOGGER_KACO
+			RS485_OFF();
+#endif			
+			PIN_SET(STATUSLED_DATALOGGER_ACT);
+			PIN_SET(STATUSLED_S0_ACT);
+			break;
 
 #ifdef DATA_LOGGER_S0    
-	case DATALOGGER_STATE_TX_S0:
-		PIN_CLEAR(STATUSLED_S0_ACT);
-		TIMSK0 &= ~(1<<ICIE1);
-		PIN_CLEAR(DATALOGGER_VIESS_MODE);
-		PIN_CLEAR(DATALOGGER_RS485_TX_ENABLE);
-		PIN_SET(DATALOGGER_RS485_RX_DISABLE);
-		PIN_SET(DATALOGGER_S0_MODE);
-		break;
+		case DATALOGGER_STATE_TX_S0:
+			VITO_OFF();
+			RS485_OFF();
+			S0_ON();
+			PIN_CLEAR(STATUSLED_S0_ACT);
+			PIN_CLEAR(STATUSLED_DATALOGGER_ACT);
+			break;
 #endif
 
 #ifdef DATA_LOGGER_VITO
-	case DATALOGGER_STATE_TX_VITO:
-		PIN_CLEAR(STATUSLED_DATALOGGER_ACT);
-		TIMSK0 &= ~(1<<ICIE1);
-		PIN_SET(DATALOGGER_VIESS_MODE);
-		PIN_CLEAR(DATALOGGER_RS485_TX_ENABLE);
-		PIN_SET(DATALOGGER_RS485_RX_DISABLE);
-		PIN_CLEAR(DATALOGGER_S0_MODE);
-		break;
+		case DATALOGGER_STATE_TX_VITO:
+			RS485_OFF();
+			S0_OFF();
+			VITO_ON();
+			PIN_CLEAR(STATUSLED_DATALOGGER_ACT);
+			break;
 #endif
 
 #ifdef DATA_LOGGER_KACO
-    case DATALOGGER_STATE_TX_KACO:
-		PIN_CLEAR(STATUSLED_DATALOGGER_ACT);
-		TIMSK0 &= ~(1<<ICIE1);
-		PIN_CLEAR(DATALOGGER_VIESS_MODE);
-		PIN_SET(DATALOGGER_RS485_TX_ENABLE);
-		PIN_SET(DATALOGGER_RS485_RX_DISABLE);
-		PIN_CLEAR(DATALOGGER_S0_MODE);
-		break;
+		case DATALOGGER_STATE_TX_KACO:
+			VITO_OFF();
+			S0_OFF();
+			RS485_TX();
+			PIN_CLEAR(STATUSLED_DATALOGGER_ACT);
+			break;
 #endif
+		}
 	}
-	SREG = sreg;
-}
-
-int16_t datalogger_init(void) {
-	DATALOGGERDEBUG("init\n");
-	datalogger_setmode(DATALOGGER_STATE_IDLE);
-	return ECMD_FINAL_OK;
 }
 
 int16_t datalogger_mainloop(void) {
     // die Mainloop, wird sooft wie möglich aufgerufen
-	if (datalogger_state != DATALOGGER_STATE_IDLE) {
-		if (timeout_counter == 0) {
-			if (datalogger_rx_errback) (*datalogger_rx_errback)();
-			datalogger_setmode(DATALOGGER_STATE_IDLE);
+	
+	if (datalogger_state != DATALOGGER_STATE_IDLE && timeout_counter == 0) {
+		// we ran in a timeout
+		if (datalogger_rx_errback) {
+			(*datalogger_rx_errback)();
 		}
+		PIN_TOGGLE(STATUSLED_DEBUG); // RED Led on.
+		datalogger_setmode(DATALOGGER_STATE_IDLE);
 	}
+	
 	int16_t ch = usart_rx_get();
 	if (ch < 0) return ECMD_FINAL_OK; // negative, no character yet received
 
@@ -164,6 +134,9 @@ int16_t datalogger_mainloop(void) {
 		ch = (*datalogger_rx_callback)(ch); // pass the character to the current RX-Callback. Callback returns -1 if there is a problem
 		if (ch < 0) {
 			datalogger_setmode(DATALOGGER_STATE_IDLE);
+			if (ch == FINISH_ERR) {
+				PIN_TOGGLE(STATUSLED_DEBUG); // RED Led on.
+			}
 		} else if (ch > 0) {
 			timeout_counter = ch;
 		}
@@ -172,16 +145,6 @@ int16_t datalogger_mainloop(void) {
 	return ECMD_FINAL_OK;
 }
 
-#ifdef DATA_LOGGER_S0
-void datalogger_s0_start(void) {
-    if (!s0_ready()) return;
-	timeout_counter = 5;
-	datalogger_setmode(DATALOGGER_STATE_TX_S0);
-	s0_start();
-	datalogger_rx_callback = s0_process_rx;
-	datalogger_rx_errback = s0_process_rx_err;
-}
-#endif
 
 #ifdef DATA_LOGGER_VITO
 void datalogger_vito_start(void) {
@@ -215,45 +178,54 @@ int16_t datalogger_vito_ecmd(char *cmd, char *output, uint16_t len)
 #endif
 
 
-#ifdef DATA_LOGGER_KACO
-void datalogger_kaco_start(int id) {
-	timeout_counter = 3;
-	datalogger_setmode(DATALOGGER_STATE_TX_KACO);
-	kaco_start(id);
-	datalogger_rx_callback = kaco_process_rx;
-	datalogger_rx_errback  = kaco_process_rx_err;
-}
-#endif
 
-/*
-  If enabled in menuconfig, this function is periodically called
-  change "timer(100,app_sample_periodic)" if needed
-*/
-int16_t
+// called every second.
+void
 datalogger_periodic(void) {
-	static int timer;
+	static int id;
+	PIN_TOGGLE(STATUSLED_DATALOGGER_ACT);
     if (datalogger_state == DATALOGGER_STATE_IDLE) {
-        if (timer == 0) {
-            datalogger_s0_start();
+		PIN_SET(STATUSLED_DEBUG);
+        if (id == 0) {
+			// Hier zählen wir die IDs durch. ID=0 ist der S0 - restl. IDs Kaco
+#ifdef DATA_LOGGER_S0
+			if (s0_ready()) {
+				timeout_counter = PERIODIC_MS2MTICKS(1000); // 1 sec
+				datalogger_setmode(DATALOGGER_STATE_TX_S0);
+				s0_start();
+				datalogger_rx_callback = s0_process_rx;
+				datalogger_rx_errback = s0_process_rx_err;
+			}
+#endif
         } else {
-            datalogger_kaco_start(timer);
+#ifdef DATA_LOGGER_KACO
+			timeout_counter = PERIODIC_MS2MTICKS(1000); // 1 sec
+			datalogger_setmode(DATALOGGER_STATE_TX_KACO);
+			kaco_start(id);
+			datalogger_rx_callback = kaco_process_rx;
+			datalogger_rx_errback  = kaco_process_rx_err;
+#endif
         }
-        timer++;
-        if (timer > DATA_LOGGER_KACO_MAX) timer = 0;
+        id++;
+        if (id > DATA_LOGGER_KACO_MAX) id = 0;
 	}
-// timerinterval is about 0.5sec
-
-	return ECMD_FINAL_OK;
 }
 
-
-
+/**
+ * millitick hander
+ */
+void
+datalogger_timeout(void) {
+	if (timeout_counter) {
+		timeout_counter--;	
+	}
+}
 
 /*
   -- Ethersex META --
   header(services/user_datalogger/datalogger.h)
   mainloop(datalogger_mainloop)
-  timer(128,datalogger_periodic())
-  periodic_milliticks_isr(datalogger_tick())
-  init(datalogger_init)
+  timer(50, datalogger_periodic())
+  periodic_milliticks_header(services/user_datalogger/datalogger.h)
+  periodic_milliticks_isr(datalogger_timeout())
 */

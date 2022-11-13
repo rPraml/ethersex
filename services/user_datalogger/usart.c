@@ -83,8 +83,8 @@ void usart_rx_start() {
 	SREG = sreg;
 }
 
-uint8_t * usart_tx_buffer() {
-	return tx_buffer;
+char * usart_tx_buffer() {
+	return (char *)tx_buffer;
 }
 void usart_tx_start(int16_t len, void *txc_callback) {
 	uint8_t sreg = SREG;

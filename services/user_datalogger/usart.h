@@ -10,7 +10,7 @@ void usart_rx_start() ;
 int16_t usart_rx_get();
 
 
-uint8_t * usart_tx_buffer();
+char * usart_tx_buffer();
 void usart_tx_start(int16_t len,  void *txc_callback);
 
 #endif
