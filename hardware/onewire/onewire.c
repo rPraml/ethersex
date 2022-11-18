@@ -52,6 +52,10 @@
 #include "core/eeprom.h"
 #endif
 
+#ifdef MQTT_SUPPORT
+#include "protocols/mqtt/mqtt.h"
+#endif
+
 /* global variables */
 ow_global_t ow_global;
 
@@ -461,7 +465,7 @@ ow_temp_read_scratchpad(ow_rom_code_t * rom,
     }
   }
 
-  return -2;
+  return 1;
 }
 
 
@@ -818,10 +822,12 @@ ow_periodic(void)
 
         /* set a semaphore of if we had a conversion or communication error */
         ow_sensors[i].conv_error = tempis85;
-
-  #ifdef ONEWIRE_HOOK_SUPPORT
+#ifdef MQTT_SUPPORT
+        ow_sensors[i].mqtt_pending = 1;
+#endif
+#ifdef ONEWIRE_HOOK_SUPPORT
         hook_ow_poll_call(&ow_sensors[i], OW_READY);
-  #endif
+#endif
       }
     }
   }
@@ -900,9 +906,56 @@ ow_names_save(void)
 
 #endif /* ONEWIRE_NAMING_SUPPORT */
 
+#ifdef MQTT_SUPPORT
+bool
+ow_mqtt_publish(int i) {
+  char temperature[7];    /* enough for two decimal digits (124.99) */
+  uint8_t temperature_length;
+  char topic[64];
+  uint8_t topic_len;
+
+  ow_temp_t temp = ow_sensors[i].temp;
+  temperature_length = itoa_fixedpoint(temp.val, temp.twodigits + 1, temperature, sizeof(temperature));
+  topic_len = snprintf_P(topic, 64, PSTR("tele/1w_%02x%02x%02x%02x%02x%02x%02x%02x/value")
+    , ow_sensors[i].ow_rom_code.bytewise[0]
+    , ow_sensors[i].ow_rom_code.bytewise[1]
+    , ow_sensors[i].ow_rom_code.bytewise[2]
+    , ow_sensors[i].ow_rom_code.bytewise[3]
+    , ow_sensors[i].ow_rom_code.bytewise[4]
+    , ow_sensors[i].ow_rom_code.bytewise[5]
+    , ow_sensors[i].ow_rom_code.bytewise[6]
+    , ow_sensors[i].ow_rom_code.bytewise[7]);
+  topic[topic_len] = 0;
+  return mqtt_construct_publish_packet(topic, temperature, temperature_length, false);
+ 
+}
+#endif
+
+void
+ow_mqtt_loop(void) {
+#ifdef MQTT_SUPPORT
+  if (mqtt_is_connected()) {
+    for (int8_t i = 0; i < OW_SENSORS_COUNT; i++)
+    {
+      if (ow_sensors[i].mqtt_pending) {
+        if (ow_mqtt_publish(i)) {
+          ow_sensors[i].mqtt_pending = 0;
+        } else {
+          return; // queue is full
+        }
+      }
+    }
+  }
+#endif
+}
+
+
+
+
 /*
   -- Ethersex META --
   header(hardware/onewire/onewire.h)
+  mainloop(ow_mqtt_loop)
   init(onewire_init)
   timer(50, ow_periodic())
 */

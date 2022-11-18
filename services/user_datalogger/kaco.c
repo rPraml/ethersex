@@ -31,6 +31,9 @@
 #include "datalogger.h"
 #include "protocols/ecmd/ecmd-base.h"
 
+#ifdef MQTT_SUPPORT
+#include "protocols/mqtt/mqtt.h"
+#endif
 
 #include "util.h"
 #include "usart.h"
@@ -47,6 +50,7 @@ typedef struct {
     int ac_p; // w
     int temp;
     int32_t total;
+    uint8_t mqtt_pending :1;
 } kaco_t;
 
 static int kaco_id ;
@@ -93,10 +97,12 @@ int16_t kaco_process_rx(uint8_t ch) {
         id = kaco_id - 1;
         if (id != (kaco_id - 1)) {
             kaco_status[kaco_id - 1].status = -11; // CRC
+            kaco_status[kaco_id - 1].mqtt_pending = 1;
             return FINISH_ERR;
         }
         if (crc_i != crc) {
             kaco_status[kaco_id - 1].status = -10; // CRC
+            kaco_status[kaco_id - 1].mqtt_pending = 1;
             return FINISH_ERR;
         }
         kaco_status[id].status = status;
@@ -110,6 +116,7 @@ int16_t kaco_process_rx(uint8_t ch) {
         kaco_status[id].total = total;
     } else {
         kaco_status[kaco_id - 1].status = -12; // CRC
+        kaco_status[kaco_id - 1].mqtt_pending = 1;
         return FINISH_ERR; // Error
     }
 	return FINISH_OK; // finish
@@ -117,6 +124,7 @@ int16_t kaco_process_rx(uint8_t ch) {
 
 void kaco_process_rx_err(void) {
     kaco_status[kaco_id - 1].status = -2; //offline
+    kaco_status[kaco_id - 1].mqtt_pending = 1;
 }
 
 
@@ -178,8 +186,57 @@ void
 kaco_init(void) {
     for (int i = 0; i < DATA_LOGGER_KACO_MAX; i++) kaco_status[i].status = -1;
 }
+
+#ifdef MQTT_SUPPORT
+bool
+kaco_mqtt_publish(int i) {
+  char topic[24];
+  uint8_t topic_length;
+  char buf[128];
+  uint8_t buf_length;
+  
+  topic_length = snprintf_P(topic, 32, PSTR("tele/kaco_%d/value"), i + 1);
+  topic[topic_length] = 0;
+  
+  buf_length = snprintf_P(buf, 128, 
+    PSTR("{\"status\":%d,\"pv_u\":%d,\"pv_i\":%ld,\"pv_p\":%d,\"ac_u\":%d,\"ac_i\":%ld,\"ac_p\":%d,\"temp\":%d,\"total\":%ld}"),
+    kaco_status[i].status,
+    kaco_status[i].pv_u,
+    kaco_status[i].pv_i,
+    kaco_status[i].pv_p,
+    kaco_status[i].ac_u,
+    kaco_status[i].ac_i,
+    kaco_status[i].ac_p,
+    kaco_status[i].temp,
+    kaco_status[i].total);
+  
+  return mqtt_construct_publish_packet(topic, buf, buf_length, false);
+ 
+}
+#endif
+void kaco_mainloop(void) {
+#ifdef MQTT_SUPPORT
+	if (mqtt_is_connected()) {
+    for (int8_t i = 0; i < DATA_LOGGER_KACO_MAX; i++)
+    {
+      if (kaco_status[i].mqtt_pending) {
+        if (kaco_mqtt_publish(i)) {
+          kaco_status[i].mqtt_pending = 0;
+        } else {
+          return; // queue is full
+        }
+      }
+    }
+  }
+#endif
+}
+
+
 /*
   -- Ethersex META --
   header(services/user_datalogger/kaco.h)
   init(kaco_init)
+#ifdef MQTT_SUPPORT
+  mainloop(kaco_mainloop)
+#endif
 */

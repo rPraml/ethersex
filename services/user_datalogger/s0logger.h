@@ -9,9 +9,12 @@ void s0_process_rx_err(void);
 int16_t s0_ecmd_status(char *cmd, char *output, uint16_t len);
 
 void s0_init(void);
+void s0logger_mainloop(void);
+void s0logger_counter(void);
 // Enable/disable Input capturer
 #define S0_OFF() PIN_CLEAR(DATALOGGER_S0_MODE); TIMSK1 |= _BV(ICIE1)
 #define S0_ON()  PIN_SET(DATALOGGER_S0_MODE);   TIMSK1 &= ~_BV(ICIE1)
+
 
 #ifdef DEBUG_S0
 #include "core/debug.h"

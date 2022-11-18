@@ -30,6 +30,8 @@ int32_t kaco_get_total_power();
  */
 int16_t kaco_ecmd_status(char *cmd, char *output, uint16_t len);
 
+void kaco_mainloop(void);
+
 #define RS485_OFF() PIN_CLEAR(DATALOGGER_RS485_TX_ENABLE); PIN_SET(DATALOGGER_RS485_RX_DISABLE)
 #define RS485_TX()  PIN_SET(DATALOGGER_RS485_TX_ENABLE);   PIN_SET(DATALOGGER_RS485_RX_DISABLE)
 #define RS485_RX()  PIN_CLEAR(DATALOGGER_RS485_TX_ENABLE); PIN_CLEAR(DATALOGGER_RS485_RX_DISABLE)

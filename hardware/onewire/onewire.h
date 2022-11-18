@@ -264,6 +264,10 @@ typedef struct
   uint8_t present :1;
   /* semaphore for conversion error 85.0°C */
   uint8_t conv_error :1;
+#ifdef MQTT_SUPPORT
+  /* the data is not yet sent via mqtt */
+  uint8_t mqtt_pending :1;
+#endif
 
   /* byte aligned fields */
 #ifdef ONEWIRE_DS18XX_SUPPORT
@@ -501,6 +505,11 @@ int16_t parse_cmd_onewire_name_clear(char *cmd, char *output, uint16_t len);
 int16_t parse_cmd_onewire_name_list(char *cmd, char *output, uint16_t len);
 int16_t parse_cmd_onewire_name_save(char *cmd, char *output, uint16_t len);
 #endif /* ONEWIRE_NAMING_SUPPORT */
+
+void ow_mqtt_loop(void);
+#ifdef MQTT_SUPPORT
+
+#endif
 
 #ifdef ONEWIRE_HOOK_SUPPORT
 #define HOOK_NAME ow_poll
