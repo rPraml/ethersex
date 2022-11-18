@@ -12,4 +12,12 @@ void s0_init(void);
 // Enable/disable Input capturer
 #define S0_OFF() PIN_CLEAR(DATALOGGER_S0_MODE); TIMSK1 |= _BV(ICIE1)
 #define S0_ON()  PIN_SET(DATALOGGER_S0_MODE);   TIMSK1 &= ~_BV(ICIE1)
+
+#ifdef DEBUG_S0
+#include "core/debug.h"
+#define S0_DEBUG(str...) debug_printf ("S0: " str)
+#else
+#define S0_DEBUG(...)    ((void) 0)
+#endif
+
 #endif

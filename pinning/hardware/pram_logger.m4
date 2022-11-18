@@ -2,7 +2,7 @@
 pin(SPI_CS_NET, SPI_CS_HARDWARE)
 
 /* port the sd-reader CS is attached to */
-pin(SPI_CS_SD_READER, PB1, OUTPUT)
+// pin(SPI_CS_SD_READER, PB1, OUTPUT)
 
 
 pin(DATALOGGER_S0_MODE, PC1, OUTPUT)
@@ -18,10 +18,25 @@ pin(STATUSLED_DATALOGGER_ACT, PC4, OUTPUT)
 /* Red */
 pin(STATUSLED_DEBUG, PC5, OUTPUT)
 
-ifdef(`conf_STATUSLED_HB_ACT', `dnl
-pin(STATUSLED_HB_ACT, PC4, OUTPUT)
-')dnl
 
+
+ONEWIRE_PORT_RANGE(PB1, PB1)
+
+ifdef(`conf_BUTTONS_INPUT', `
+  /* input buttons */
+  pin(BTN_1, PA0, INPUT)
+  pin(BTN_2, PA1, INPUT)
+  pin(BTN_3, PA2, INPUT)
+  pin(BTN_4, PA3, INPUT)
+
+  #define BUTTONS_COUNT 4
+
+  #define BUTTONS_CONFIG(_x) \
+  _x(BTN_1)\
+  _x(BTN_2)\
+  _x(BTN_3)\
+  _x(BTN_4)
+')
 
 ifdef(`conf_RFM12', `dnl
   /* port the rfm12 module CS is attached to */

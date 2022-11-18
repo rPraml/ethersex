@@ -64,6 +64,7 @@ void (*datalogger_rx_errback)();
 
 
 void datalogger_setmode(uint8_t state) {
+	LOGGER_DEBUG("Mode: %02d start\n", state);
 	ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
 	{
 		datalogger_state = state;
@@ -86,8 +87,12 @@ void datalogger_setmode(uint8_t state) {
 
 #ifdef DATA_LOGGER_S0    
 		case DATALOGGER_STATE_TX_S0:
+#ifdef DATA_LOGGER_VITO
 			VITO_OFF();
+#endif			
+#ifdef DATA_LOGGER_KACO
 			RS485_OFF();
+#endif			
 			S0_ON();
 			PIN_CLEAR(STATUSLED_S0_ACT);
 			PIN_CLEAR(STATUSLED_DATALOGGER_ACT);
@@ -96,8 +101,12 @@ void datalogger_setmode(uint8_t state) {
 
 #ifdef DATA_LOGGER_VITO
 		case DATALOGGER_STATE_TX_VITO:
+#ifdef DATA_LOGGER_KACO
 			RS485_OFF();
+#endif	
+#ifdef DATA_LOGGER_S0 
 			S0_OFF();
+#endif
 			VITO_ON();
 			PIN_CLEAR(STATUSLED_DATALOGGER_ACT);
 			break;
@@ -105,8 +114,12 @@ void datalogger_setmode(uint8_t state) {
 
 #ifdef DATA_LOGGER_KACO
 		case DATALOGGER_STATE_TX_KACO:
+#ifdef DATA_LOGGER_VITO
 			VITO_OFF();
+#endif			
+#ifdef DATA_LOGGER_S0 
 			S0_OFF();
+#endif
 			RS485_TX();
 			PIN_CLEAR(STATUSLED_DATALOGGER_ACT);
 			break;
@@ -120,10 +133,11 @@ int16_t datalogger_mainloop(void) {
 	
 	if (datalogger_state != DATALOGGER_STATE_IDLE && timeout_counter == 0) {
 		// we ran in a timeout
+		LOGGER_DEBUG("Mode: %02d timeout\n", datalogger_state);
 		if (datalogger_rx_errback) {
 			(*datalogger_rx_errback)();
 		}
-		PIN_TOGGLE(STATUSLED_DEBUG); // RED Led on.
+		PIN_CLEAR(STATUSLED_DEBUG); // RED Led on.
 		datalogger_setmode(DATALOGGER_STATE_IDLE);
 	}
 	
@@ -133,9 +147,11 @@ int16_t datalogger_mainloop(void) {
 	if (datalogger_rx_callback) {
 		ch = (*datalogger_rx_callback)(ch); // pass the character to the current RX-Callback. Callback returns -1 if there is a problem
 		if (ch < 0) {
+			LOGGER_DEBUG("Mode: %02d Ret: %02d\n", datalogger_state, ch);
 			datalogger_setmode(DATALOGGER_STATE_IDLE);
 			if (ch == FINISH_ERR) {
-				PIN_TOGGLE(STATUSLED_DEBUG); // RED Led on.
+				
+				PIN_CLEAR(STATUSLED_DEBUG); // RED Led on.
 			}
 		} else if (ch > 0) {
 			timeout_counter = ch;
@@ -190,20 +206,20 @@ datalogger_periodic(void) {
 			// Hier zählen wir die IDs durch. ID=0 ist der S0 - restl. IDs Kaco
 #ifdef DATA_LOGGER_S0
 			if (s0_ready()) {
-				timeout_counter = PERIODIC_MS2MTICKS(1000); // 1 sec
+				timeout_counter = PERIODIC_MS2MTICKS(5000); // 5 sec
 				datalogger_setmode(DATALOGGER_STATE_TX_S0);
-				s0_start();
 				datalogger_rx_callback = s0_process_rx;
 				datalogger_rx_errback = s0_process_rx_err;
+				s0_start();
 			}
 #endif
         } else {
 #ifdef DATA_LOGGER_KACO
 			timeout_counter = PERIODIC_MS2MTICKS(1000); // 1 sec
 			datalogger_setmode(DATALOGGER_STATE_TX_KACO);
-			kaco_start(id);
 			datalogger_rx_callback = kaco_process_rx;
 			datalogger_rx_errback  = kaco_process_rx_err;
+			kaco_start(id);
 #endif
         }
         id++;
@@ -225,7 +241,7 @@ datalogger_timeout(void) {
   -- Ethersex META --
   header(services/user_datalogger/datalogger.h)
   mainloop(datalogger_mainloop)
-  timer(50, datalogger_periodic())
+  timer(200, datalogger_periodic())
   periodic_milliticks_header(services/user_datalogger/datalogger.h)
   periodic_milliticks_isr(datalogger_timeout())
 */

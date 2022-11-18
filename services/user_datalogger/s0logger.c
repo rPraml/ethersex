@@ -6,6 +6,7 @@
 #include <util/delay.h>
 #include <util/parity.h>
 #include "config.h"
+#include "core/periodic.h"
 #include "protocols/ecmd/ecmd-base.h"
 
 
@@ -58,7 +59,6 @@ typedef union {  // union erlaubt einen effektiven, seperaten Zugriff auf Teile 
 	};
 } convert32to8;
 
-volatile uint32_t timestamp;    // volatile wegen Zugriff im Interrrupt
 volatile uint16_t softtimer;
 volatile uint32_t zeitdifferenz;
 volatile uint16_t pulse;
@@ -72,8 +72,10 @@ volatile uint16_t statusled;
 
 void s0_init() {
 	TCCR1B |= _BV(ICNC1) | _BV(ICES1);   // NoiseCanceler + EdgeSelect
+	TIMSK1 |= _BV(ICIE1);
 }
 
+/*
 void s0_ovfTick() {
 
 	++softtimer; 		   // zählen der Überläufe
@@ -86,13 +88,24 @@ void s0_ovfTick() {
         PIN_SET(STATUSLED_S0_ACT);
     }
 }
+*/
+#define START_CAPTURE 0
+#define CAPTURING 1
+#define CONVERSION_DONE 2
+#define READ_SERIAL 3
+
+volatile uint8_t pulse_state;
+volatile uint8_t pulse_count;
+volatile uint32_t pulse_timer;
+volatile uint8_t pulse_capture_count;
+volatile uint32_t pulse_capture_timer;
 
 ISR(TIMER1_CAPT_vect)
 {    //  Flanke an ICP pin
 	// Wird immer pro Wattstunde aufgerufen.
 	// Wir müssen die Zeit zwischen 2 Impulsen stoppen, so dass wir die Leistung ausrechnen können
 	// 
-    statusled = 2;
+  /*  statusled = 2;
 
     convert32to8 cap;        // Variablendeklaration
 	cap.i8l = ICR1L;         // low Byte zuerst, high Byte wird gepuffert
@@ -112,11 +125,42 @@ ISR(TIMER1_CAPT_vect)
 	} else {
 		zeitdifferenz = cap.i32 - timestamp;
 		pulse++;
+	}*/
+	switch (pulse_state) {
+		
+		case START_CAPTURE:
+		pulse_count = 0;
+		pulse_timer = 0;
+		pulse_state = CAPTURING;
+		break;
+		
+		case CAPTURING:
+		pulse_count++;
+		if (pulse_count > 2 && pulse_timer > 1000) {
+			pulse_capture_count = pulse_count;
+			pulse_capture_timer = pulse_timer;
+			pulse_state = CONVERSION_DONE;
+		}
+		break;
 	}
+
 	//(zeitdifferenz - (zeitdifferenz / 4)) + ((cap.i32 - timestamp) / 4);
 }
 
 
+void s0logger_mainloop() {
+	static uint16_t oldPulse = 0;
+	if (s0_powerFwdTick != s0_powerRevTick) {
+		uint16_t delta = pulse - oldPulse;
+		oldPulse = pulse;
+		S0_DEBUG("Impulse %d\n", delta);
+		
+		s0_powerRevTick = s0_powerFwdTick;
+	}
+}
+void s0logger_counter() {
+	pulse_timer++;
+}
 void s0_start() {
 	util_readline('\n', READLINE_CRLF); // to reset buffer
 	datalogger_rx_state = 0;
@@ -125,9 +169,20 @@ void s0_start() {
 	memcpy_P(usart_tx_buffer(), PSTR("/?!\r\n"),5); // Initialisierung
 	usart_setbaud(BAUDRATE(300),7,'E',1);
 	usart_tx_start(5, NULL); // transmit 5 chars from buffer
+	S0_DEBUG("Start\n");
 }
+
 int s0_ready() {
-    return 1; //pulse > 4;
+	S0_DEBUG("pulse_state %d\n", pulse_state);
+	if (pulse_state == CONVERSION_DONE) {
+		S0_DEBUG("P %d %d\n", pulse_capture_count, pulse_capture_timer);
+		pulse_state = READ_SERIAL;
+		return -1;
+	}
+	if (pulse_state == READ_SERIAL) {
+		pulse_state = START_CAPTURE;
+	}
+    return 0; //pulse > 4;
 }
 /**
  * @return -1 wenn Fertig, 0 wenn nochmal, > 0 Dauer
@@ -140,6 +195,7 @@ int16_t s0_process_rx(uint8_t ch) {
 	}
 	if (ch == 3) { // ETX
 		s0_status.online = CONVERT_OK;
+		pulse_state = START_CAPTURE;
 		return -1; // Fertig
 	}
 	uint16_t tmp_lo;
@@ -150,6 +206,8 @@ int16_t s0_process_rx(uint8_t ch) {
 	char * line = util_readline(ch, READLINE_CRLF);
 	if (!line) return 0; // no line yet there
 
+	S0_DEBUG("State %d Line %s\n", datalogger_rx_state, line);
+	
 	switch (datalogger_rx_state) {
 	case 0:
 		_delay_ms(50);
@@ -160,9 +218,10 @@ int16_t s0_process_rx(uint8_t ch) {
 
 	case 10:
 		// hier werden die Zeilen vom Zähler geparsed
+		
 		sscanf_P(line, PSTR("FF(%x)"), 	&s0_status.errorFlag);
 		sscanf_P(line, PSTR("C.5.0(%x)"), 	&s0_status.statusFlag);
-		s0_status.watt = (uint32_t)(F_CPU/64*3600) / (uint32_t)zeitdifferenz * pulse;
+		s0_status.watt = (uint32_t)(pulse_capture_count)*(uint32_t)(180000) / (uint32_t)pulse_capture_timer;
 		if (s0_status.statusFlag & 0x01) s0_status.watt *=  -1;
 		
 		if (sscanf_P(line, PSTR("1.8.0(%lu.%1u*"), &tmp_hi, &tmp_lo) == 2) {
@@ -199,12 +258,13 @@ int16_t s0_process_rx(uint8_t ch) {
 			}
 		}
 
-		return 5; // timeout ~2 sec
+		return PERIODIC_MS2MTICKS(2000); // timeout ~2 sec
 	}
 	return 0;
 }
 
 void s0_process_rx_err(void) {
+	pulse_state = START_CAPTURE;
 	s0_status.online = CONVERT_FAIL;
 }
 
@@ -274,6 +334,9 @@ s0_ecmd_status(char *cmd, char *output, uint16_t len) {
 /*
   -- Ethersex META --
   header(services/user_datalogger/s0logger.h)
+  mainloop(s0logger_mainloop)
   init(s0_init)
+  periodic_milliticks_header(services/user_datalogger/datalogger.h)
+  periodic_milliticks_isr(s0logger_counter())
 */
 

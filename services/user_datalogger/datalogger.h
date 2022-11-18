@@ -23,8 +23,19 @@
 #define HAVE_DATALOGGER_H
 
 
+#ifdef DEBUG_KACO
+#include "core/debug.h"
+#define KACO_DEBUG(str...) debug_printf ("KACO: " str)
+#else
+#define KACO_DEBUG(...)    ((void) 0)
+#endif
 
-int16_t datalogger_vito_ecmd(char *cmd, char *output, uint16_t len);
+#ifdef DEBUG_LOGGER
+#include "core/debug.h"
+#define LOGGER_DEBUG(str...) debug_printf ("LOGGER: " str)
+#else
+#define LOGGER_DEBUG(...)    ((void) 0)
+#endif
 
 int16_t
 datalogger_status(char *cmd, char *output, uint16_t len);
