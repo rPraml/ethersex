@@ -115,7 +115,7 @@ httpd_handle_ecmd(void)
       else
         STATE->eof = 1;
 
-      STATE->u.ecmd.output[len++] = 10;
+      if (STATE->u.ecmd.output[len] != ECMD_NO_NEWLINE) STATE->u.ecmd.output[len++] = 10;
       STATE->u.ecmd.output[len] = 0;
     }
   }

@@ -111,7 +111,7 @@ s0logger_mqtt_publish(void) {
     s0_status.energyRev, 
     s0_status.watt,
     kaco_pwr);
-  return mqtt_construct_publish_packet_P(PSTR("tele/s0/value"), buf, buf_length, false);
+  return mqtt_construct_publish_packet_P(PSTR("tele/s0/json"), buf, buf_length, false);
  
 }
 #endif
