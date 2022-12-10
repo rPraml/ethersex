@@ -916,15 +916,20 @@ ow_mqtt_publish(int i) {
 
   ow_temp_t temp = ow_sensors[i].temp;
   temperature_length = itoa_fixedpoint(temp.val, temp.twodigits + 1, temperature, sizeof(temperature));
-  topic_len = snprintf_P(topic, 64, PSTR("tele/1w_%02x%02x%02x%02x%02x%02x%02x%02x/temp")
-    , ow_sensors[i].ow_rom_code.bytewise[0]
-    , ow_sensors[i].ow_rom_code.bytewise[1]
-    , ow_sensors[i].ow_rom_code.bytewise[2]
-    , ow_sensors[i].ow_rom_code.bytewise[3]
-    , ow_sensors[i].ow_rom_code.bytewise[4]
-    , ow_sensors[i].ow_rom_code.bytewise[5]
-    , ow_sensors[i].ow_rom_code.bytewise[6]
-    , ow_sensors[i].ow_rom_code.bytewise[7]);
+#ifdef ONEWIRE_NAMING_SUPPORT
+  if (ow_sensors[i].named) {
+    topic_len = snprintf_P(topic, 64, PSTR("tele/1w_%s/temp"), ow_sensors[i].name);
+  } else
+#endif
+    topic_len = snprintf_P(topic, 64, PSTR("tele/1w_%02x%02x%02x%02x%02x%02x%02x%02x/temp")
+      , ow_sensors[i].ow_rom_code.bytewise[0]
+      , ow_sensors[i].ow_rom_code.bytewise[1]
+      , ow_sensors[i].ow_rom_code.bytewise[2]
+      , ow_sensors[i].ow_rom_code.bytewise[3]
+      , ow_sensors[i].ow_rom_code.bytewise[4]
+      , ow_sensors[i].ow_rom_code.bytewise[5]
+      , ow_sensors[i].ow_rom_code.bytewise[6]
+      , ow_sensors[i].ow_rom_code.bytewise[7]);
   topic[topic_len] = 0;
   return mqtt_construct_publish_packet(topic, temperature, temperature_length, false);
  

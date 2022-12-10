@@ -20,7 +20,7 @@ pin(STATUSLED_DEBUG, PC5, OUTPUT)
 
 
 
-ONEWIRE_PORT_RANGE(PB1, PB1)
+ONEWIRE_PORT_RANGE(PB0, PB1)
 
 ifdef(`conf_BUTTONS_INPUT', `
   /* input buttons */

@@ -15,6 +15,7 @@ void s0logger_counter(void);
 #define S0_OFF() PIN_CLEAR(DATALOGGER_S0_MODE); TIMSK1 |= _BV(ICIE1)
 #define S0_ON()  PIN_SET(DATALOGGER_S0_MODE);   TIMSK1 &= ~_BV(ICIE1)
 
+#define DATALOGGER_STATE_TX_S0 1
 
 #ifdef DEBUG_S0
 #include "core/debug.h"

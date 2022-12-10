@@ -11,6 +11,7 @@ dep_bool_menu "Data Logger(EXPERIMENTAL)" DATA_LOGGER_SUPPORT $CONFIG_EXPERIMENT
 	comment "Debugging Flags"
 	dep_bool "Debug S0" DEBUG_S0 $DEBUG $DATA_LOGGER_S0
 	dep_bool "Debug Kaco" DEBUG_KACO $DEBUG $DATA_LOGGER_KACO
+	dep_bool "Debug Vito" DEBUG_VITO $DEBUG
 	dep_bool "Debug Logger" DEBUG_LOGGER $DEBUG
 endmenu
 

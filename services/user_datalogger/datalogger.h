@@ -22,14 +22,6 @@
 #ifndef HAVE_DATALOGGER_H
 #define HAVE_DATALOGGER_H
 
-
-#ifdef DEBUG_KACO
-#include "core/debug.h"
-#define KACO_DEBUG(str...) debug_printf ("KACO: " str)
-#else
-#define KACO_DEBUG(...)    ((void) 0)
-#endif
-
 #ifdef DEBUG_LOGGER
 #include "core/debug.h"
 #define LOGGER_DEBUG(str...) debug_printf ("LOGGER: " str)
@@ -54,6 +46,15 @@ datalogger_mainloop(void);
 #define CONTINUE 0
 #define FINISH_OK -1
 #define FINISH_ERR -2
+
+#define DATALOGGER_STATE_IDLE 0
+
+
+volatile unsigned int timeout_counter;
+
+volatile uint8_t datalogger_state;
+
+void datalogger_setmode(uint8_t state);
 
 #include "config.h"
 #ifdef DEBUG_DATA_LOGGER

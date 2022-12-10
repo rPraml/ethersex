@@ -36,27 +36,19 @@
 #include "usart.h"
 
 
-#define DATALOGGER_STATE_IDLE 0
 
 #ifdef DATA_LOGGER_S0
 #include "s0logger.h"
-#define DATALOGGER_STATE_TX_S0 1
 #endif
 
 #ifdef DATA_LOGGER_VITO
 #include "vito.h"
-#define DATALOGGER_STATE_TX_VITO 2
 #endif
 
 #ifdef DATA_LOGGER_KACO
 #include "kaco.h"
-#define DATALOGGER_STATE_TX_KACO 3
 #endif
 
-
-volatile unsigned int timeout_counter;
-
-volatile uint8_t datalogger_state;
 
 int16_t (*datalogger_rx_callback)(uint8_t ch);
 
@@ -64,12 +56,12 @@ void (*datalogger_rx_errback)();
 
 
 void datalogger_setmode(uint8_t state) {
-	LOGGER_DEBUG("Mode: %02d start\n", state);
 	ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
 	{
 		datalogger_state = state;
 		switch (datalogger_state) {
 		case DATALOGGER_STATE_IDLE:
+      LOGGER_DEBUG("IDLE\n");
 			datalogger_rx_callback = NULL;
 			datalogger_rx_errback = NULL;
 #ifdef DATA_LOGGER_S0 
@@ -87,6 +79,7 @@ void datalogger_setmode(uint8_t state) {
 
 #ifdef DATA_LOGGER_S0    
 		case DATALOGGER_STATE_TX_S0:
+      LOGGER_DEBUG("TX_S0\n");
 #ifdef DATA_LOGGER_VITO
 			VITO_OFF();
 #endif			
@@ -101,6 +94,7 @@ void datalogger_setmode(uint8_t state) {
 
 #ifdef DATA_LOGGER_VITO
 		case DATALOGGER_STATE_TX_VITO:
+      LOGGER_DEBUG("TX_VITO\n");
 #ifdef DATA_LOGGER_KACO
 			RS485_OFF();
 #endif	
@@ -114,6 +108,7 @@ void datalogger_setmode(uint8_t state) {
 
 #ifdef DATA_LOGGER_KACO
 		case DATALOGGER_STATE_TX_KACO:
+      LOGGER_DEBUG("TX_KACO\n");
 #ifdef DATA_LOGGER_VITO
 			VITO_OFF();
 #endif			
@@ -129,11 +124,11 @@ void datalogger_setmode(uint8_t state) {
 }
 
 int16_t datalogger_mainloop(void) {
-    // die Mainloop, wird sooft wie möglich aufgerufen
+    // die Mainloop, wird sooft wie möglich aufgerufenx
 	
 	if (datalogger_state != DATALOGGER_STATE_IDLE && timeout_counter == 0) {
 		// we ran in a timeout
-		LOGGER_DEBUG("Mode: %02d timeout\n", datalogger_state);
+		LOGGER_DEBUG("Timeout\n", datalogger_state);
 		if (datalogger_rx_errback) {
 			(*datalogger_rx_errback)();
 		}
@@ -147,7 +142,7 @@ int16_t datalogger_mainloop(void) {
 	if (datalogger_rx_callback) {
 		ch = (*datalogger_rx_callback)(ch); // pass the character to the current RX-Callback. Callback returns -1 if there is a problem
 		if (ch < 0) {
-			LOGGER_DEBUG("Mode: %02d Ret: %02d\n", datalogger_state, ch);
+			LOGGER_DEBUG("State %02d, Res %02d\n", datalogger_state, ch);
 			datalogger_setmode(DATALOGGER_STATE_IDLE);
 			if (ch == FINISH_ERR) {
 				
@@ -161,48 +156,14 @@ int16_t datalogger_mainloop(void) {
 	return ECMD_FINAL_OK;
 }
 
-
-#ifdef DATA_LOGGER_VITO
-void datalogger_vito_start(void) {
-	while (datalogger_state != DATALOGGER_STATE_IDLE) {
-		wdt_kick();
-		datalogger_mainloop();
-	}
-    _delay_ms(10);
-	timeout_counter = 10;
-	datalogger_setmode(DATALOGGER_STATE_TX_VITO);
-	usart_setbaud(BAUDRATE(4800),8,'E',2);
-	usart_rx_start() ;
-}
-
-int16_t datalogger_vito_ecmd(char *cmd, char *output, uint16_t len) 
-{
-  int ret, fnct, addr, dataLen;
-	uint32_t data;
-	sscanf_P(cmd, PSTR("%x %x %x %lx"), &fnct, &addr, &dataLen, &data);
-	if (dataLen * 5 > len) return ECMD_FINAL(snprintf_P(output, len, PSTR("Too long")));
-
-	datalogger_vito_start();
-	if ((ret = vito_getData(fnct, addr,dataLen,data, output)) >0) {
-		datalogger_setmode(DATALOGGER_STATE_IDLE);
-		return ECMD_FINAL(ret);
-	}
-	datalogger_setmode(DATALOGGER_STATE_IDLE);
-	//strncpy(output, datalogger_ident, len);
-	return ECMD_FINAL(snprintf_P(output, len, PSTR("Timeout")));
-}
-#endif
-
-
-
 // called every second.
 void
 datalogger_periodic(void) {
 	static int id;
 	PIN_TOGGLE(STATUSLED_DATALOGGER_ACT);
-    if (datalogger_state == DATALOGGER_STATE_IDLE) {
+  if (datalogger_state == DATALOGGER_STATE_IDLE) {
 		PIN_SET(STATUSLED_DEBUG);
-        if (id == 0) {
+    if (id == 0) {
 			// Hier zählen wir die IDs durch. ID=0 ist der S0 - restl. IDs Kaco
 #ifdef DATA_LOGGER_S0
 			if (s0_ready()) {
@@ -213,7 +174,7 @@ datalogger_periodic(void) {
 				s0_start();
 			}
 #endif
-        } else {
+    } else {
 #ifdef DATA_LOGGER_KACO
 			timeout_counter = PERIODIC_MS2MTICKS(1000); // 1 sec
 			datalogger_setmode(DATALOGGER_STATE_TX_KACO);
@@ -221,9 +182,9 @@ datalogger_periodic(void) {
 			datalogger_rx_errback  = kaco_process_rx_err;
 			kaco_start(id);
 #endif
-        }
-        id++;
-        if (id > DATA_LOGGER_KACO_MAX) id = 0;
+    }
+    id++;
+    if (id > DATA_LOGGER_KACO_MAX) id = 0;
 	}
 }
 

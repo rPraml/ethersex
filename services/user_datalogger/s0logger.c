@@ -58,7 +58,7 @@ void s0_init() {
 }
 
 #define START_CAPTURE 0
-#define SYNCED 1
+#define SYNCING 1
 #define CAPTURING 2
 #define CONVERSION_DONE 3
 #define READ_SERIAL 4
@@ -75,12 +75,19 @@ ISR(TIMER1_CAPT_vect)
 	switch (pulse_state) {
 		
 		case START_CAPTURE: // der erste Pulse wird ignoriert
-    case SYNCED:
 		pulse_count = 0;
 		pulse_timer = 0;
 		pulse_state++;
 		break;
-		
+
+		case SYNCING:
+		if (pulse_timer > 200) {
+			pulse_count = 0;
+			pulse_timer = 0;
+			pulse_state++;
+		}
+		break;
+
 		case CAPTURING:
 		pulse_count++;
 		if (pulse_count > 3 && pulse_timer > 1000) {
@@ -90,6 +97,7 @@ ISR(TIMER1_CAPT_vect)
 		}
 		break;
 	}
+//	S0_DEBUG("pulse_%d %d %ld\n", pulse_state, pulse_count, pulse_timer);
 
 }
 #ifdef MQTT_SUPPORT
@@ -142,7 +150,6 @@ void s0_start() {
 }
 
 int s0_ready() {
-	S0_DEBUG("pulse_state %d\n", pulse_state);
 	if (pulse_state == CONVERSION_DONE) {
 		S0_DEBUG("P %d %d\n", pulse_capture_count, pulse_capture_timer);
 		pulse_state = READ_SERIAL;
@@ -224,18 +231,23 @@ s0_ecmd_status(char *cmd, char *output, uint16_t len) {
 		1000 pulse = 1KWh
 		1 Pulse = 1Wh
 		Timerticks: 115200 / sec = F_CPU/64*3600 per hour	*/
-		len = snprintf_P(output, len, PSTR("%4d,%4d,%3d,%10lu00,%10lu00,%8ld"),
-		        s0_status.errorFlag, 
-			s0_status.statusFlag, 
-			s0_status.online,
+		len = snprintf_P(output, len, PSTR("%4d,%4d,%3d,"),
+		    s0_status.errorFlag, 
+        s0_status.statusFlag, 
+        s0_status.online);
+    output[len] = ECMD_NO_NEWLINE;
+		return ECMD_AGAIN(len);
+    
+  case 1:
+		len = snprintf_P(output, len, PSTR("%10lu00,%10lu00,%8ld,"),
       s0_status.energyFwd, 
       s0_status.energyRev, 
       s0_status.watt);
-		
+				
 #ifdef DATA_LOGGER_KACO    
 		output[len] = ECMD_NO_NEWLINE;
 		return ECMD_AGAIN(len);
-  case 1:
+  case 2:
       kaco_pwr = kaco_get_total_power();
       len = snprintf_P(output, len, PSTR(",%10ld,%10ld"),
           kaco_pwr, kaco_pwr + s0_status.watt);

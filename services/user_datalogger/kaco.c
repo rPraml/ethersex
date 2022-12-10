@@ -64,6 +64,7 @@ void kaco_rx_485(void) {
 void kaco_start(int id) {
     if (id < 1 || id > DATA_LOGGER_KACO_MAX) return;
     kaco_id = id;
+  KACO_DEBUG("Start %02d\n", id);
 	util_readline('\n', READLINE_CRLF); // to reset buffer
 	sprintf_P(usart_tx_buffer(), PSTR("#%02d0\r"), id); // send request
 	usart_setbaud(BAUDRATE(9600), 8, 'N', 1);
@@ -96,11 +97,13 @@ int16_t kaco_process_rx(uint8_t ch) {
         id -= '1';
         id = kaco_id - 1;
         if (id != (kaco_id - 1)) {
+            KACO_DEBUG("ID err %02d\n", kaco_id);
             kaco_status[kaco_id - 1].status = -11; // CRC
             kaco_status[kaco_id - 1].mqtt_pending = 1;
             return FINISH_ERR;
         }
         if (crc_i != crc) {
+            KACO_DEBUG("CRC err %02d\n", kaco_id);
             kaco_status[kaco_id - 1].status = -10; // CRC
             kaco_status[kaco_id - 1].mqtt_pending = 1;
             return FINISH_ERR;
@@ -114,7 +117,9 @@ int16_t kaco_process_rx(uint8_t ch) {
         kaco_status[id].ac_p = ac_p;
         kaco_status[id].temp = temp;
         kaco_status[id].total = total;
+        KACO_DEBUG("%02d %s\n", kaco_id, line);
     } else {
+        KACO_DEBUG("Comm err %02d\n", kaco_id);
         kaco_status[kaco_id - 1].status = -12; // CRC
         kaco_status[kaco_id - 1].mqtt_pending = 1;
         return FINISH_ERR; // Error
@@ -123,6 +128,7 @@ int16_t kaco_process_rx(uint8_t ch) {
 }
 
 void kaco_process_rx_err(void) {
+    KACO_DEBUG("Offline %02d\n", kaco_id);
     kaco_status[kaco_id - 1].status = -2; //offline
     kaco_status[kaco_id - 1].mqtt_pending = 1;
 }
