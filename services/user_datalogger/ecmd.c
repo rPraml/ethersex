@@ -63,10 +63,6 @@ ecmd_ifdef(DATA_LOGGER_KACO)
 ecmd_feature(datalogger_kaco, "kaco",, Manually call application sample commands)
 ecmd_endif()
 
-ecmd_ifdef(DATA_LOGGER_VITO)
-ecmd_feature(datalogger_vito, "vito",, Manually call application sample commands)
-ecmd_endif()
-
 ecmd_ifdef(DATA_LOGGER_S0)
 ecmd_feature(datalogger_s0, "s0",, Manually call application sample commands)
 ecmd_endif()

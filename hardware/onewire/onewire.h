@@ -507,9 +507,6 @@ int16_t parse_cmd_onewire_name_save(char *cmd, char *output, uint16_t len);
 #endif /* ONEWIRE_NAMING_SUPPORT */
 
 void ow_mqtt_loop(void);
-#ifdef MQTT_SUPPORT
-
-#endif
 
 #ifdef ONEWIRE_HOOK_SUPPORT
 #define HOOK_NAME ow_poll

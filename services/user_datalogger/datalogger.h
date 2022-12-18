@@ -39,6 +39,9 @@ datalogger_periodic(void);
 void
 datalogger_timeout(void);
 
+void
+datalogger_init(void);
+
 int16_t
 datalogger_mainloop(void);
 

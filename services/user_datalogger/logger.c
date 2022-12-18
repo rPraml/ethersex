@@ -36,6 +36,9 @@
 #include "usart.h"
 
 
+#ifdef MQTT_SUPPORT
+#include "protocols/mqtt/mqtt.h"
+#endif
 
 #ifdef DATA_LOGGER_S0
 #include "s0logger.h"
@@ -49,6 +52,42 @@
 #include "kaco.h"
 #endif
 
+
+
+static uint8_t stateD;
+static uint8_t debounceD1;
+static uint8_t debounceD2;
+static uint32_t gas_counter = 0;
+// Handle Pinchange Interrupt on PortD
+/*ISR(PCINT3_vect)
+{
+  uint8_t TempDiff;
+  uint8_t PinState = PINA;
+  // Detect changes having proved stable:
+  TempDiff = 
+    // Bits that have changed (filter unchanged Bits)
+    (PinState ^ stateD)
+  
+  if (!(PIND & _BV(PD7))) {
+    gas_counter++;
+  }
+  
+  stateD = PinState
+}
+
+void datalogger_init(void) {
+  DDRD &= ~_BV(PD7);
+  PORTD |= _BV(PD7);
+  PCMSK3 = _BV(PD7);  // Enable Pinchange Interrupt on PortD
+  PCICR |= 1<<PCIE3;
+}
+*/
+
+void datalogger_init(void) {
+ // DDRD &= ~_BV(PD7);
+ // DDRD |= _BV(PD7);
+ // PORTD &= ~_BV(PD7);
+}
 
 int16_t (*datalogger_rx_callback)(uint8_t ch);
 
@@ -128,7 +167,7 @@ int16_t datalogger_mainloop(void) {
 	
 	if (datalogger_state != DATALOGGER_STATE_IDLE && timeout_counter == 0) {
 		// we ran in a timeout
-		LOGGER_DEBUG("Timeout\n", datalogger_state);
+		LOGGER_DEBUG("Timeout. State %02x\n", datalogger_state);
 		if (datalogger_rx_errback) {
 			(*datalogger_rx_errback)();
 		}
@@ -156,6 +195,9 @@ int16_t datalogger_mainloop(void) {
 	return ECMD_FINAL_OK;
 }
 
+void datalogger_debug(void) {
+  LOGGER_DEBUG("Gas: %ld %x %x %x %x\n", gas_counter, PINA, PINB, PINC, PIND);
+}
 // called every second.
 void
 datalogger_periodic(void) {
@@ -164,7 +206,15 @@ datalogger_periodic(void) {
   if (datalogger_state == DATALOGGER_STATE_IDLE) {
 		PIN_SET(STATUSLED_DEBUG);
     if (id == 0) {
+
+#ifdef MQTT_SUPPORT
+      char buf[16];
+      uint8_t buf_length;
+      buf_length = snprintf_P(buf, 16, PSTR("%ld"), gas_counter);
+      mqtt_construct_publish_packet_P(PSTR("tele/gas/counter"), buf, buf_length, false);
+#endif
 			// Hier zählen wir die IDs durch. ID=0 ist der S0 - restl. IDs Kaco
+      
 #ifdef DATA_LOGGER_S0
 			if (s0_ready()) {
 				timeout_counter = PERIODIC_MS2MTICKS(5000); // 5 sec
@@ -172,9 +222,15 @@ datalogger_periodic(void) {
 				datalogger_rx_callback = s0_process_rx;
 				datalogger_rx_errback = s0_process_rx_err;
 				s0_start();
-			}
+			} else {
+        timeout_counter = PERIODIC_MS2MTICKS(1500); // sync should happen in one second
+        datalogger_setmode(DATALOGGER_STATE_TX_VITO);
+        vito_start();
+        datalogger_rx_callback = vito_process_rx;
+        datalogger_rx_errback = vito_process_err;
+      }
 #endif
-    } else {
+    } else if (id <= DATA_LOGGER_KACO_MAX) {
 #ifdef DATA_LOGGER_KACO
 			timeout_counter = PERIODIC_MS2MTICKS(1000); // 1 sec
 			datalogger_setmode(DATALOGGER_STATE_TX_KACO);
@@ -182,9 +238,15 @@ datalogger_periodic(void) {
 			datalogger_rx_errback  = kaco_process_rx_err;
 			kaco_start(id);
 #endif
+    } else {
+      timeout_counter = PERIODIC_MS2MTICKS(1500); // sync should happen in one second
+      datalogger_setmode(DATALOGGER_STATE_TX_VITO);
+      vito_start();
+      datalogger_rx_callback = vito_process_rx;
+      datalogger_rx_errback = vito_process_err;
     }
     id++;
-    if (id > DATA_LOGGER_KACO_MAX) id = 0;
+    if (id > DATA_LOGGER_KACO_MAX + 25) id = 0;
 	}
 }
 
@@ -193,16 +255,30 @@ datalogger_periodic(void) {
  */
 void
 datalogger_timeout(void) {
+  uint8_t i;
+  
 	if (timeout_counter) {
 		timeout_counter--;	
 	}
-}
 
+  i = stateD ^ ~PIND;
+  debounceD1 = ~(debounceD1 & i);
+  debounceD2 = debounceD1 ^ (debounceD2 & i);
+  i &= debounceD1 & debounceD2;
+  stateD ^= i;
+  i = stateD & i;
+
+  if (i & _BV(PD7)) {
+    gas_counter++;
+  }
+}
+//   timer(20, datalogger_debug())
 /*
   -- Ethersex META --
   header(services/user_datalogger/datalogger.h)
+  init(datalogger_init)
   mainloop(datalogger_mainloop)
-  timer(200, datalogger_periodic())
+  timer(30, datalogger_periodic())
   periodic_milliticks_header(services/user_datalogger/datalogger.h)
   periodic_milliticks_isr(datalogger_timeout())
 */
