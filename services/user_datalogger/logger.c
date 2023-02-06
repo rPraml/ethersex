@@ -54,10 +54,9 @@
 
 
 
-static uint8_t stateD;
-static uint8_t debounceD1;
-static uint8_t debounceD2;
-static uint32_t gas_counter = 0;
+
+static volatile uint32_t gas_counter = 0;
+static volatile int32_t gas_power = -1;
 // Handle Pinchange Interrupt on PortD
 /*ISR(PCINT3_vect)
 {
@@ -162,15 +161,41 @@ void datalogger_setmode(uint8_t state) {
 	}
 }
 
+uint32_t datalogger_get_gas_power() {
+  uint32_t ret = -1;
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
+  {
+    if (gas_power != -1) {
+      ret = gas_power;
+      gas_power = -1;
+    }
+  }
+  return ret;
+}
 int16_t datalogger_mainloop(void) {
     // die Mainloop, wird sooft wie möglich aufgerufenx
-	
+
+  
+#ifdef MQTT_SUPPORT
+  uint32_t power = datalogger_get_gas_power();
+  if (power != -1) {
+    char buf[16];
+    uint8_t buf_length;
+    LOGGER_DEBUG("Power:%ld\n", power);
+    power = ((uint32_t)3600 * 100 * CONF_MTICKS_PER_SEC) / power;
+    LOGGER_DEBUG("Power:%ld\n", power);
+    buf_length = snprintf_P(buf, 16, PSTR("%ld"), power);
+    mqtt_construct_publish_packet_P(PSTR("tele/gas-power/counter"), buf, buf_length, false);
+  }
+#endif
+
+
 	if (datalogger_state != DATALOGGER_STATE_IDLE && timeout_counter == 0) {
 		// we ran in a timeout
-		LOGGER_DEBUG("Timeout. State %02x\n", datalogger_state);
 		if (datalogger_rx_errback) {
 			(*datalogger_rx_errback)();
 		}
+		LOGGER_DEBUG("Timeout. State %02x\n", datalogger_state);
 		PIN_CLEAR(STATUSLED_DEBUG); // RED Led on.
 		datalogger_setmode(DATALOGGER_STATE_IDLE);
 	}
@@ -184,7 +209,6 @@ int16_t datalogger_mainloop(void) {
 			LOGGER_DEBUG("State %02d, Res %02d\n", datalogger_state, ch);
 			datalogger_setmode(DATALOGGER_STATE_IDLE);
 			if (ch == FINISH_ERR) {
-				
 				PIN_CLEAR(STATUSLED_DEBUG); // RED Led on.
 			}
 		} else if (ch > 0) {
@@ -222,13 +246,7 @@ datalogger_periodic(void) {
 				datalogger_rx_callback = s0_process_rx;
 				datalogger_rx_errback = s0_process_rx_err;
 				s0_start();
-			} else {
-        timeout_counter = PERIODIC_MS2MTICKS(1500); // sync should happen in one second
-        datalogger_setmode(DATALOGGER_STATE_TX_VITO);
-        vito_start();
-        datalogger_rx_callback = vito_process_rx;
-        datalogger_rx_errback = vito_process_err;
-      }
+	    }
 #endif
     } else if (id <= DATA_LOGGER_KACO_MAX) {
 #ifdef DATA_LOGGER_KACO
@@ -246,7 +264,7 @@ datalogger_periodic(void) {
       datalogger_rx_errback = vito_process_err;
     }
     id++;
-    if (id > DATA_LOGGER_KACO_MAX + 25) id = 0;
+    if (id > DATA_LOGGER_KACO_MAX + 1) id = 0;
 	}
 }
 
@@ -256,11 +274,16 @@ datalogger_periodic(void) {
 void
 datalogger_timeout(void) {
   uint8_t i;
-  
-	if (timeout_counter) {
+  static uint32_t gas_timer;
+  static uint8_t stateD;
+  static uint8_t debounceD1;
+  static uint8_t debounceD2;
+	
+  if (timeout_counter) {
 		timeout_counter--;	
 	}
-
+  gas_timer++;
+  
   i = stateD ^ ~PIND;
   debounceD1 = ~(debounceD1 & i);
   debounceD2 = debounceD1 ^ (debounceD2 & i);
@@ -270,6 +293,12 @@ datalogger_timeout(void) {
 
   if (i & _BV(PD7)) {
     gas_counter++;
+    // 100 Pulses pro m^3
+    // 1m^3 ~ 10KWh
+    // 1 pulse ~ 100wh
+    // 1 pulse / h = 100w 
+    gas_power = gas_timer;
+    gas_timer = 0;
   }
 }
 //   timer(20, datalogger_debug())
@@ -278,7 +307,7 @@ datalogger_timeout(void) {
   header(services/user_datalogger/datalogger.h)
   init(datalogger_init)
   mainloop(datalogger_mainloop)
-  timer(30, datalogger_periodic())
+  timer(200, datalogger_periodic())
   periodic_milliticks_header(services/user_datalogger/datalogger.h)
   periodic_milliticks_isr(datalogger_timeout())
 */

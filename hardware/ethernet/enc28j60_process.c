@@ -139,7 +139,7 @@ void network_process(void)
 
     /* receive error */
     if (EIR & _BV(RXERIF)) {
-        debug_printf("net: receive error!\n");
+        //debug_printf("net: receive error!\n");
 
         bit_field_clear(REG_EIR, _BV(RXERIF));
 

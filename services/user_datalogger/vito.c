@@ -20,13 +20,14 @@
 #define KW_SYNC 0x05
 
 
-#define VITO_DATA_COUNT 32
+#define VITO_DATA_COUNT 24
 #define VITO_NAME_LEN 8
 
 
 #define VITO_STATE_SYNCING 0
 #define VITO_STATE_SYNCED 1
 #define VITO_STATE_TXC 2
+#define VITO_STATE_NEXT_CMD 3
 
 #define CONV_NONE 1
 #define CONV_S_DIV2 2
@@ -120,66 +121,88 @@ void vito_txc(void) {
   vito_state = VITO_STATE_TXC;
 }
 
+
+int16_t vito_send_cmd(bool sync) {
+  vito_value = 0;
+  char *ptr = usart_tx_buffer();
+  vito_bytes = vito_data[vito_index].len;
+  uint8_t mode = vito_data[vito_index].type;
+  uint16_t addr = vito_data[vito_index].addr;
+  uint8_t len = vito_data[vito_index].len;
+  uint8_t datalen = 0;
+  
+  vito_state = VITO_STATE_SYNCED;
+  if (sync) {
+    *ptr++ = KW_START;
+    datalen++;
+  }
+  
+  *ptr++ = mode;
+  datalen++;
+  
+  switch (mode) {
+      // Lesebefehle
+    case 0xF7: // Virtuell_Read (normales Lesen)
+    case 0x6B: // 6B=GFA_Read
+    case 0x7B: // 7B=PROZESS_READ
+      *ptr++ = addr >> 8;
+      *ptr++ = addr;
+      *ptr++ = len;
+      datalen += 3;
+      break;
+    
+    case 0xC7: // VIRTUAL READ
+    case 0xCB: // PHYSICAL READ
+    case 0xAE: // EEPROM READ
+    case 0xC5: // PHYSICAL XRAM READ
+    case 0x6E: // PHYSICAL PORT READ
+    case 0x9E: // PHYSICAL BE READ
+    case 0x33: // PHYSICAL KMBUS RAM READ
+    case 0x43: // PHYSICAL KMBUS EEPROM READ
+      *ptr++ = addr;
+      *ptr++ = len;
+      datalen += 2;
+      break;
+    default:
+      VITO_DEBUG("Mode: %02x not supported\n", mode);
+      return FINISH_ERR;
+  }
+  
+  *ptr++ = KW_END;
+  datalen++;
+  
+  usart_tx_start(datalen, vito_txc);
+  VITO_DEBUG("TX:");
+  ptr = usart_tx_buffer();
+  int i;
+  for (int i = 0; i < datalen; i++) {
+    VITO_DEBUG_CONT(" %02x", ptr[i]);
+  }
+  return PERIODIC_MS2MTICKS(300); // Innerhalb von 300ms sollte die Antwort kommen, sonst->Timeout  
+}
 int16_t vito_process_rx(uint8_t ch) {
   //VITO_DEBUG("RX %d (%02x) State %d\n", ch, ch, vito_state);
   if (vito_state == VITO_STATE_SYNCING && ch == KW_SYNC) {
-    vito_state = VITO_STATE_SYNCED;
-    vito_value = 0;
-    char *ptr = usart_tx_buffer();
-    uint8_t mode = vito_data[vito_index].type;
-    uint16_t addr = vito_data[vito_index].addr;
-    uint8_t len = vito_data[vito_index].len;
-    uint8_t datalen;
-    
-    *ptr++ = KW_START;
-    *ptr++ = mode;
-    
-    switch (mode) {
-        // Lesebefehle
-      case 0xF7: // Virtuell_Read (normales Lesen)
-      case 0x6B: // 6B=GFA_Read
-      case 0x7B: // 7B=PROZESS_READ
-        *ptr++ = addr >> 8;
-        *ptr++ = addr;
-        *ptr++ = len;
-        datalen = 6;
-        break;
-      
-      case 0xC7: // VIRTUAL READ
-      case 0xCB: // PHYSICAL READ
-      case 0xAE: // EEPROM READ
-      case 0xC5: // PHYSICAL XRAM READ
-      case 0x6E: // PHYSICAL PORT READ
-      case 0x9E: // PHYSICAL BE READ
-      case 0x33: // PHYSICAL KMBUS RAM READ
-      case 0x43: // PHYSICAL KMBUS EEPROM READ
-        *ptr++ = addr;
-        *ptr++ = len;
-        datalen = 5;
-        break;
-      default:
-        VITO_DEBUG("Mode: %02x not supported\n", mode);
-        return FINISH_ERR;
-    }
-    *ptr++ = KW_END;
-    usart_tx_start(datalen, vito_txc);
-    VITO_DEBUG("TX %d bytes\n", datalen);
-    return PERIODIC_MS2MTICKS(1000);
+    return vito_send_cmd(true);
   }
   if (vito_state == VITO_STATE_TXC) {
     vito_value |= ch & 0xFF;
     if (--vito_bytes <= 0) {
       vito_data[vito_index].value = vito_value;
-      VITO_DEBUG("%02x%02x=%ld (%lx)\n",
-        vito_data[vito_index].type,
-        vito_data[vito_index].addr,
-        vito_value, vito_value);
+      VITO_DEBUG_CONT(" RX: %s %ld (%lx)\n",
+        vito_data[vito_index].name, vito_value, vito_value);
         
       if (vito_data[vito_index].convType) {
         vito_mqtt_publish(
           vito_data[vito_index].convType,
           vito_value,
           vito_data[vito_index].name);
+      }
+      if (vito_index + 1 < VITO_DATA_COUNT) {
+        if (vito_data[vito_index + 1].type) {
+          vito_index++;
+          return vito_send_cmd(false);
+        }
       }
       return FINISH_OK;
     }
@@ -189,9 +212,7 @@ int16_t vito_process_rx(uint8_t ch) {
 }
 
 void vito_process_err(void) {
-  VITO_DEBUG("Timeout %02x%02x\n", 
-    vito_data[vito_index].type,
-    vito_data[vito_index].addr);
+  VITO_DEBUG_CONT(" Timeout\n");
   vito_data[vito_index].value = 0xFFFFFFFF;
 }
 
@@ -223,7 +244,6 @@ void vito_start(void) {
     vito_data[vito_index].name[len] = 0;
   }
   
-  vito_bytes = vito_data[vito_index].len;
   VITO_DEBUG("Fetch %d %s\n", vito_index, vito_data[vito_index].name);
   vito_state = VITO_STATE_SYNCING;
   usart_setbaud(BAUDRATE(4800),8,'E',2);
@@ -418,19 +438,27 @@ void vito_init(void) {
   vito_add(0xCB, 0x42, 1, CONV_U_DIV2,  "WW_I");
   vito_add(0xCB, 0x5C, 1, CONV_U_DIV2,  "WW_S");
   
-  vito_add(0xCB, 0x17, 2, CONV_NONE,    "Brenner0");
-  vito_add(0xAE, 0x17, 2, CONV_NONE,    "BStd");
-  // ??
-  vito_add(0xCB, 0x22, 2, CONV_NONE,    "Brenner1");
+  //vito_add(0xCB, 0x64, 1, CONV_NONE,    "Niveau");  // OK
+  //vito_add(0xCB, 0x65, 1, CONV_U_DIV10, "Neigung"); // OK 
+
+  vito_add(0xCB, 0x16, 1, CONV_NONE,    "Brenner0");
+  vito_add(0xCB, 0x17, 1, CONV_NONE,    "Brenner1");
+  vito_add(0xCB, 0x18, 1, CONV_NONE,    "Brenner2");
+  //vito_add(0xCB, 0x22, 1, CONV_NONE,    "Brenner3");
+  vito_add(0xCB, 0x23, 1, CONV_NONE,    "Brenner4");
+
+  //vito_add(0xAE, 0x17, 1, CONV_NONE,    "BStd1"); // FALSCH
+  vito_add(0xAE, 0x18, 1, CONV_NONE,    "BStd2"); // FALSCH
+  vito_add(0xC5, 0x17, 1, CONV_NONE,    "BStd3"); // FALSCH
+  //vito_add(0xC5, 0x18, 1, CONV_NONE,    "BStd4"); // FALSCH
+
 //  vito_add(0xCB, 0x23, 2, CONV_NONE,    "Brenner2");
 
-  //vito_add(0xCB, 0x64, 1, CONV_NONE,    "Niveau");  
-  //vito_add(0xCB, 0x65, 1, CONV_U_DIV10, "Neigung");  
 
   vito_add(0xCB, 0x3F, 1, CONV_NONE,    "Fehler");
   vito_add(0xCB, 0x51, 1, CONV_NONE,    "Programm");
   vito_add(0xCB, 0xB0, 1, CONV_NONE,    "Drehzahl");
-  //vito_add(0xCB, 0x53, 1, CONV_NONE,    "Raum_S");
+ //vito_add(0xCB, 0x53, 1, CONV_NONE,    "Raum_S");
   
 
 /*  

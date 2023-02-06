@@ -18,8 +18,10 @@ void vito_process_err(void);
 #ifdef DEBUG_VITO
 #include "core/debug.h"
 #define VITO_DEBUG(str...) debug_printf ("VITO: " str)
+#define VITO_DEBUG_CONT(s, args...) printf_P(PSTR(s), ## args)
 #else
 #define VITO_DEBUG(...)    ((void) 0)
+#define VITO_DEBUG_CONT(...)    ((void) 0)
 #endif
 
 #endif
