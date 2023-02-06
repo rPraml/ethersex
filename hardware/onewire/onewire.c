@@ -937,30 +937,36 @@ ow_mqtt_publish(int i) {
 #endif
 
 void
-ow_mqtt_loop(void) {
+ow_mqtt_poll_cb(void) {
 #ifdef MQTT_SUPPORT
-  if (mqtt_is_connected()) {
     for (int8_t i = 0; i < OW_SENSORS_COUNT; i++)
     {
-      if (ow_sensors[i].mqtt_pending) {
-        if (ow_mqtt_publish(i)) {
-          ow_sensors[i].mqtt_pending = 0;
-        } else {
-          return; // queue is full
+      ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+        if (ow_sensors[i].mqtt_pending) {
+          if (ow_mqtt_publish(i)) {
+            ow_sensors[i].mqtt_pending = 0;
+          } else {
+            return; // queue is full
+          }
         }
       }
     }
-  }
 #endif
 }
 
 
-
+const mqtt_callback_config_t ow_mqtt_callback_config PROGMEM = {
+  .topic = NULL,
+  .connack_callback = NULL,
+  .poll_callback = ow_mqtt_poll_cb,
+  .close_callback = NULL,
+  .publish_callback = NULL
+};
 
 /*
   -- Ethersex META --
   header(hardware/onewire/onewire.h)
-  mainloop(ow_mqtt_loop)
   init(onewire_init)
   timer(50, ow_periodic())
+  mqtt_conf(ow_mqtt_callback_config)
 */

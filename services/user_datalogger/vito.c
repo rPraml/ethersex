@@ -113,6 +113,7 @@ bool vito_mqtt_publish(uint8_t convType, uint32_t input, char *name) {
 
 static volatile int vito_state;
 static volatile int vito_index;
+static volatile int vito_index_publishing = -1;
 static volatile int vito_bytes;
 static volatile uint32_t vito_value;
 
@@ -174,7 +175,6 @@ int16_t vito_send_cmd(bool sync) {
   usart_tx_start(datalen, vito_txc);
   VITO_DEBUG("TX:");
   ptr = usart_tx_buffer();
-  int i;
   for (int i = 0; i < datalen; i++) {
     VITO_DEBUG_CONT(" %02x", ptr[i]);
   }
@@ -193,10 +193,7 @@ int16_t vito_process_rx(uint8_t ch) {
         vito_data[vito_index].name, vito_value, vito_value);
         
       if (vito_data[vito_index].convType) {
-        vito_mqtt_publish(
-          vito_data[vito_index].convType,
-          vito_value,
-          vito_data[vito_index].name);
+        vito_index_publishing = vito_index;
       }
       if (vito_index + 1 < VITO_DATA_COUNT) {
         if (vito_data[vito_index + 1].type) {
@@ -216,7 +213,25 @@ void vito_process_err(void) {
   vito_data[vito_index].value = 0xFFFFFFFF;
 }
 
+void vito_mqtt_poll_cb(void) {
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+    if (vito_index_publishing != -1) {
+      vito_mqtt_publish(
+        vito_data[vito_index_publishing].convType,
+        vito_value,
+        vito_data[vito_index_publishing].name);
+      vito_index_publishing = -1;
+    }
+  }
+}
 
+const mqtt_callback_config_t vito_mqtt_callback_config PROGMEM = {
+  .topic = NULL,
+  .connack_callback = NULL,
+  .poll_callback = vito_mqtt_poll_cb,
+  .close_callback = NULL,
+  .publish_callback = NULL
+};
 
 void vito_start(void) {
   int i = VITO_DATA_COUNT;
@@ -516,6 +531,7 @@ datalogger_vito_ecmd(char *cmd, char *output, uint16_t len) {
   -- Ethersex META 
   header(services/user_datalogger/vito.h)
   init(vito_init)
+  mqtt_conf(vito_mqtt_callback_config)
   ecmd_feature(datalogger_vito_set, "vito set",, Manually call application sample commands)
   ecmd_feature(datalogger_vito_list, "vito list",, Manually call application sample commands)
 

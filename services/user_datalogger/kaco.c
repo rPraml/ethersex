@@ -25,6 +25,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <util/atomic.h>
 #include <util/delay.h>
 #include <util/parity.h>
 #include "config.h"
@@ -220,11 +221,11 @@ kaco_mqtt_publish(int i) {
  
 }
 #endif
-void kaco_mainloop(void) {
+void kaco_mqtt_poll_cb(void) {
 #ifdef MQTT_SUPPORT
-	if (mqtt_is_connected()) {
-    for (int8_t i = 0; i < DATA_LOGGER_KACO_MAX; i++)
-    {
+  for (int8_t i = 0; i < DATA_LOGGER_KACO_MAX; i++)
+  {
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
       if (kaco_status[i].mqtt_pending) {
         if (kaco_mqtt_publish(i)) {
           kaco_status[i].mqtt_pending = 0;
@@ -237,12 +238,19 @@ void kaco_mainloop(void) {
 #endif
 }
 
+const mqtt_callback_config_t kaco_mqtt_callback_config PROGMEM = {
+  .topic = NULL,
+  .connack_callback = NULL,
+  .poll_callback = kaco_mqtt_poll_cb,
+  .close_callback = NULL,
+  .publish_callback = NULL
+};
 
 /*
   -- Ethersex META --
   header(services/user_datalogger/kaco.h)
   init(kaco_init)
 #ifdef MQTT_SUPPORT
-  mainloop(kaco_mainloop)
+  mqtt_conf(kaco_mqtt_callback_config)
 #endif
 */

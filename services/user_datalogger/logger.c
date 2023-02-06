@@ -56,6 +56,7 @@
 
 
 static volatile uint32_t gas_counter = 0;
+static volatile uint32_t gas_counter_mqtt = 0;
 static volatile int32_t gas_power = -1;
 // Handle Pinchange Interrupt on PortD
 /*ISR(PCINT3_vect)
@@ -219,6 +220,22 @@ int16_t datalogger_mainloop(void) {
 	return ECMD_FINAL_OK;
 }
 
+void logger_mqtt_poll_cb() {
+  uint32_t value;
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
+  {
+    if (gas_counter_mqtt == 0) {
+      return;
+    }
+    value = gas_counter_mqtt;
+    gas_counter_mqtt = 0;
+  }
+  char buf[16];
+  uint8_t buf_length;
+  buf_length = snprintf_P(buf, 16, PSTR("%ld"), value);
+  mqtt_construct_publish_packet_P(PSTR("tele/gas/counter"), buf, buf_length, false);
+}
+
 void datalogger_debug(void) {
   LOGGER_DEBUG("Gas: %ld %x %x %x %x\n", gas_counter, PINA, PINB, PINC, PIND);
 }
@@ -230,12 +247,9 @@ datalogger_periodic(void) {
   if (datalogger_state == DATALOGGER_STATE_IDLE) {
 		PIN_SET(STATUSLED_DEBUG);
     if (id == 0) {
-
+      gas_counter_mqtt = gas_counter;
 #ifdef MQTT_SUPPORT
-      char buf[16];
-      uint8_t buf_length;
-      buf_length = snprintf_P(buf, 16, PSTR("%ld"), gas_counter);
-      mqtt_construct_publish_packet_P(PSTR("tele/gas/counter"), buf, buf_length, false);
+
 #endif
 			// Hier zählen wir die IDs durch. ID=0 ist der S0 - restl. IDs Kaco
       
@@ -301,6 +315,14 @@ datalogger_timeout(void) {
     gas_timer = 0;
   }
 }
+
+const mqtt_callback_config_t logger_mqtt_callback_config PROGMEM = {
+  .topic = NULL,
+  .connack_callback = NULL,
+  .poll_callback = logger_mqtt_poll_cb,
+  .close_callback = NULL,
+  .publish_callback = NULL
+};
 //   timer(20, datalogger_debug())
 /*
   -- Ethersex META --
@@ -310,4 +332,5 @@ datalogger_timeout(void) {
   timer(200, datalogger_periodic())
   periodic_milliticks_header(services/user_datalogger/datalogger.h)
   periodic_milliticks_isr(datalogger_timeout())
+  mqtt_conf(logger_mqtt_callback_config)
 */
