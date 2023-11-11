@@ -39,6 +39,10 @@ int16_t parse_cmd_datalogger_kaco(char *cmd, char *output, uint16_t len)
 {
   return kaco_ecmd_status(cmd, output, len);
 }
+int16_t parse_cmd_datalogger_goodwe(char *cmd, char *output, uint16_t len) 
+{
+  return goodwe_ecmd_status(cmd, output, len);
+}
 #endif
 
 #ifdef DATA_LOGGER_VITO
@@ -61,6 +65,7 @@ int16_t parse_cmd_datalogger_s0(char *cmd, char *output, uint16_t len)
 block([[datalogger]])
 ecmd_ifdef(DATA_LOGGER_KACO)
 ecmd_feature(datalogger_kaco, "kaco",, Manually call application sample commands)
+ecmd_feature(datalogger_goodwe, "goodwe",, Manually call application sample commands)
 ecmd_endif()
 
 ecmd_ifdef(DATA_LOGGER_S0)

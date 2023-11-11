@@ -55,7 +55,7 @@ typedef struct
   uint8_t mqtt_pending : 1;
 } kaco_t;
 
-typedef struct 
+typedef struct
 {
   uint16_t pv1_u; // Reg 768
   uint16_t pv2_u;
@@ -184,9 +184,8 @@ modbus_crc_calc(uint8_t *data, uint8_t len)
   return crc;
 }
 
-
 static volatile uint8_t rx_addr; // address we expect to receive
-static volatile uint8_t rx_len; // negth in byte
+static volatile uint8_t rx_len;  // negth in byte
 static volatile uint8_t rx_pos;  // buffer pos
 static volatile uint16_t rx_reg; // start register
 
@@ -217,28 +216,28 @@ int16_t goodwe_process_rx(uint8_t ch)
   if (rx_pos == rx_len + 5)
   {
     uint16_t crc = modbus_crc_calc(datalogger_scratch, rx_len + 3);
-    uint16_t rx_crc =  datalogger_scratch[rx_pos - 1] << 8 | datalogger_scratch[rx_pos - 2];
-    if (crc == rx_crc) {
-      char * src = datalogger_scratch + 3;
-      char * dst = &goodwe_status;
-      for (crc = 0; crc < sizeof(goodwe_t); crc += 2) {
-        dst[crc] = src[crc+1];
-        dst[crc+1] = src[crc];
+    uint16_t rx_crc = datalogger_scratch[rx_pos - 1] << 8 | datalogger_scratch[rx_pos - 2];
+    if (crc == rx_crc)
+    {
+      char *src = datalogger_scratch + 3;
+      char *dst = &goodwe_status;
+      for (crc = 0; crc < sizeof(goodwe_t); crc += 2)
+      {
+        dst[crc] = src[crc + 1];
+        dst[crc + 1] = src[crc];
       }
       KACO_DEBUG("PV %d %d %d %d\n",
-        goodwe_status.pv1_u, goodwe_status.pv2_u,
-        goodwe_status.pv1_i, goodwe_status.pv2_i);
+                 goodwe_status.pv1_u, goodwe_status.pv2_u,
+                 goodwe_status.pv1_i, goodwe_status.pv2_i);
       KACO_DEBUG("AC-U %d %d %d\n",
-        goodwe_status.ac_l1_u, goodwe_status.ac_l2_u, goodwe_status.ac_l3_u);
+                 goodwe_status.ac_l1_u, goodwe_status.ac_l2_u, goodwe_status.ac_l3_u);
       KACO_DEBUG("AC-I %d %d %d\n",
-        goodwe_status.ac_l1_i, goodwe_status.ac_l2_i, goodwe_status.ac_l3_i);
+                 goodwe_status.ac_l1_i, goodwe_status.ac_l2_i, goodwe_status.ac_l3_i);
       KACO_DEBUG("AC-HZ %d %d %d\n",
-        goodwe_status.ac_l1_hz, goodwe_status.ac_l2_hz, goodwe_status.ac_l3_hz);
+                 goodwe_status.ac_l1_hz, goodwe_status.ac_l2_hz, goodwe_status.ac_l3_hz);
       KACO_DEBUG("STATE %d %d %d\n",
-        goodwe_status.power, goodwe_status.status, goodwe_status.temperature);
-
+                 goodwe_status.power, goodwe_status.status, goodwe_status.temperature);
     }
-    
 
     return FINISH_OK;
   }
@@ -249,6 +248,9 @@ int16_t goodwe_process_rx(uint8_t ch)
 
 void goodwe_process_rx_err(void)
 {
+  KACO_DEBUG("Offline\n");
+  goodwe_status.status = -2; // offline
+  //kaco_status[kaco_id - 1].mqtt_pending = 1;
 }
 
 typedef struct
@@ -289,7 +291,7 @@ void goodwe_read_register(uint8_t modbusAddr, uint16_t start, uint16_t length)
 
 void goodwe_start()
 {
-  goodwe_read_register(0xF7, 0x300, 33);
+  goodwe_read_register(0xF7, 0x300, 22);
 }
 
 int32_t kaco_get_total_power()
@@ -345,6 +347,88 @@ kaco_ecmd_status(char *cmd, char *output, uint16_t len)
     len = snprintf_P(output, len, PSTR("%6d,%6ld"),
                      kaco_status[id].temp,
                      kaco_status[id].total);
+    return ECMD_FINAL(len);
+  }
+
+  return ECMD_FINAL_OK;
+}
+
+int16_t
+goodwe_ecmd_status(char *cmd, char *output, uint16_t len)
+{
+  static uint8_t line;
+
+  if (cmd[0] != 23)
+  {
+    cmd[0] = 23;
+    line = 0;
+  }
+  /*
+  uint16_t pv1_u; // Reg 768
+  uint16_t pv2_u;
+  uint16_t pv1_i;
+  uint16_t pv2_i;
+  uint16_t ac_l1_u;
+  uint16_t ac_l2_u;
+  uint16_t ac_l3_u;
+  uint16_t ac_l1_i;
+  uint16_t ac_l2_i;
+  uint16_t ac_l3_i;
+  uint16_t ac_l1_hz;
+  uint16_t ac_l2_hz;
+  uint16_t ac_l3_hz;
+  uint16_t power;
+  uint16_t status;
+  int16_t temperature;
+  uint16_t error_hi;
+  uint16_t error_lo;
+  uint16_t energy_hi;
+  uint16_t energy_lo;
+  uint16_t hours_hi;
+  uint16_t hours_lo;
+
+  uint16_t energy_today;*/
+  switch (line++)
+  {
+  case 0:
+    len = snprintf_P(output, len, PSTR("%6d,%6d,"),
+                     goodwe_status.pv1_u,
+                     goodwe_status.pv2_u);
+    output[len] = ECMD_NO_NEWLINE;
+    return ECMD_AGAIN(len);
+  case 1:
+    len = snprintf_P(output, len, PSTR("%6d,%6d,"),
+                     goodwe_status.pv1_i,
+                     goodwe_status.pv2_i);
+    output[len] = ECMD_NO_NEWLINE;
+    return ECMD_AGAIN(len);
+
+  case 2:
+    len = snprintf_P(output, len, PSTR("%6d,%6d,%6d,"),
+                     goodwe_status.ac_l1_u,
+                     goodwe_status.ac_l2_u,
+                     goodwe_status.ac_l3_u);
+    output[len] = ECMD_NO_NEWLINE;
+    return ECMD_AGAIN(len);
+  case 3:
+    len = snprintf_P(output, len, PSTR("%6d,%6d,%6d,"),
+                     goodwe_status.ac_l1_i,
+                     goodwe_status.ac_l2_i,
+                     goodwe_status.ac_l3_i);
+    output[len] = ECMD_NO_NEWLINE;
+    return ECMD_AGAIN(len);
+  case 4:
+    len = snprintf_P(output, len, PSTR("%6d,%6d,%6d,"),
+                     goodwe_status.ac_l1_hz,
+                     goodwe_status.ac_l2_hz,
+                     goodwe_status.ac_l3_hz);
+    output[len] = ECMD_NO_NEWLINE;
+    return ECMD_AGAIN(len);
+  case 5:
+    len = snprintf_P(output, len, PSTR("%6d,%6d,%6d"),
+                     goodwe_status.power,
+                     goodwe_status.status,
+                     goodwe_status.temperature);
     return ECMD_FINAL(len);
   }
 
