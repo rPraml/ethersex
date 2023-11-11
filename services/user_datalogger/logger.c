@@ -110,10 +110,10 @@ void datalogger_setmode(uint8_t state) {
 			VITO_OFF();
 #endif			
 #ifdef DATA_LOGGER_KACO
-			RS485_OFF();
+			RS485_0_OFF();
+			RS485_1_OFF();
 #endif			
 			PIN_SET(STATUSLED_DATALOGGER_ACT);
-			PIN_SET(STATUSLED_S0_ACT);
 			break;
 
 #ifdef DATA_LOGGER_S0    
@@ -123,10 +123,10 @@ void datalogger_setmode(uint8_t state) {
 			VITO_OFF();
 #endif			
 #ifdef DATA_LOGGER_KACO
-			RS485_OFF();
+			RS485_0_OFF();
+			RS485_1_OFF();
 #endif			
 			S0_ON();
-			PIN_CLEAR(STATUSLED_S0_ACT);
 			PIN_CLEAR(STATUSLED_DATALOGGER_ACT);
 			break;
 #endif
@@ -135,7 +135,8 @@ void datalogger_setmode(uint8_t state) {
 		case DATALOGGER_STATE_TX_VITO:
       LOGGER_DEBUG("TX_VITO\n");
 #ifdef DATA_LOGGER_KACO
-			RS485_OFF();
+			RS485_0_OFF();
+			RS485_1_OFF();
 #endif	
 #ifdef DATA_LOGGER_S0 
 			S0_OFF();
@@ -154,7 +155,20 @@ void datalogger_setmode(uint8_t state) {
 #ifdef DATA_LOGGER_S0 
 			S0_OFF();
 #endif
-			RS485_TX();
+			RS485_0_TX();
+			RS485_1_OFF();
+			PIN_CLEAR(STATUSLED_DATALOGGER_ACT);
+			break;
+		case DATALOGGER_STATE_TX_GOODWE:
+      LOGGER_DEBUG("TX_GOODWE\n");
+#ifdef DATA_LOGGER_VITO
+			VITO_OFF();
+#endif			
+#ifdef DATA_LOGGER_S0 
+			S0_OFF();
+#endif
+			RS485_0_OFF();
+			RS485_1_TX();
 			PIN_CLEAR(STATUSLED_DATALOGGER_ACT);
 			break;
 #endif
@@ -174,7 +188,7 @@ uint32_t datalogger_get_gas_power() {
   return ret;
 }
 int16_t datalogger_mainloop(void) {
-    // die Mainloop, wird sooft wie möglich aufgerufenx
+    // die Mainloop, wird sooft wie mï¿½glich aufgerufenx
 
   
 #ifdef MQTT_SUPPORT
@@ -197,7 +211,7 @@ int16_t datalogger_mainloop(void) {
 			(*datalogger_rx_errback)();
 		}
 		LOGGER_DEBUG("Timeout. State %02x\n", datalogger_state);
-		PIN_CLEAR(STATUSLED_DEBUG); // RED Led on.
+		// PIN_CLEAR(STATUSLED_DEBUG); // RED Led on.
 		datalogger_setmode(DATALOGGER_STATE_IDLE);
 	}
 	
@@ -210,7 +224,7 @@ int16_t datalogger_mainloop(void) {
 			LOGGER_DEBUG("State %02d, Res %02d\n", datalogger_state, ch);
 			datalogger_setmode(DATALOGGER_STATE_IDLE);
 			if (ch == FINISH_ERR) {
-				PIN_CLEAR(STATUSLED_DEBUG); // RED Led on.
+				// PIN_CLEAR(STATUSLED_DEBUG); // RED Led on.
 			}
 		} else if (ch > 0) {
 			timeout_counter = ch;
@@ -243,15 +257,14 @@ void datalogger_debug(void) {
 void
 datalogger_periodic(void) {
 	static int id;
-	PIN_TOGGLE(STATUSLED_DATALOGGER_ACT);
+	PIN_TOGGLE(STATUSLED_DEBUG);
   if (datalogger_state == DATALOGGER_STATE_IDLE) {
-		PIN_SET(STATUSLED_DEBUG);
     if (id == 0) {
       gas_counter_mqtt = gas_counter;
 #ifdef MQTT_SUPPORT
 
 #endif
-			// Hier zählen wir die IDs durch. ID=0 ist der S0 - restl. IDs Kaco
+			// Hier zï¿½hlen wir die IDs durch. ID=0 ist der S0 - restl. IDs Kaco
       
 #ifdef DATA_LOGGER_S0
 			if (s0_ready()) {
@@ -270,7 +283,15 @@ datalogger_periodic(void) {
 			datalogger_rx_errback  = kaco_process_rx_err;
 			kaco_start(id);
 #endif
+    } else if (id == DATA_LOGGER_KACO_MAX + 1) {
+	    // Nach KACO 1x den Goodwe abfragen
+			timeout_counter = PERIODIC_MS2MTICKS(1000); // 1 sec
+			datalogger_setmode(DATALOGGER_STATE_TX_GOODWE);
+			datalogger_rx_callback = goodwe_process_rx;
+			datalogger_rx_errback  = goodwe_process_rx_err;
+			goodwe_start();
     } else {
+      // als letztes dann noch die Vito-Kommunikation
       timeout_counter = PERIODIC_MS2MTICKS(1500); // sync should happen in one second
       datalogger_setmode(DATALOGGER_STATE_TX_VITO);
       vito_start();
