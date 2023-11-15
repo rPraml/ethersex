@@ -20,7 +20,7 @@
 #define KW_SYNC 0x05
 
 
-#define VITO_DATA_COUNT 24
+#define VITO_DATA_COUNT 20
 #define VITO_NAME_LEN 8
 
 

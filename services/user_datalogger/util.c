@@ -4,6 +4,8 @@
 #include "config.h"
 #include "util.h"
 
+char datalogger_scratch[DATALOGGER_SCRATCH_SIZE];
+
 char *util_readline(uint8_t ch, int mode)
 {
 	static uint8_t pos;
