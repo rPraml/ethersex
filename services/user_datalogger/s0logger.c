@@ -249,7 +249,7 @@ s0_ecmd_status(char *cmd, char *output, uint16_t len) {
 		return ECMD_AGAIN(len);
   case 2:
       kaco_pwr = kaco_get_total_power();
-      len = snprintf_P(output, len, PSTR(",%10ld,%10ld"),
+      len = snprintf_P(output, len, PSTR("%10ld,%10ld"),
           kaco_pwr, kaco_pwr + s0_status.watt);
 
 #endif

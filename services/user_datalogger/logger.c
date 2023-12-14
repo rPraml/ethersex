@@ -299,7 +299,7 @@ datalogger_periodic(void) {
       datalogger_rx_errback = vito_process_err;
     }
     id++;
-    if (id > DATA_LOGGER_KACO_MAX + 1) id = 0;
+    if (id > DATA_LOGGER_KACO_MAX + 2) id = 0;
 	}
 }
 

@@ -218,7 +218,7 @@ void vito_mqtt_poll_cb(void) {
     if (vito_index_publishing != -1) {
       vito_mqtt_publish(
         vito_data[vito_index_publishing].convType,
-        vito_value,
+        vito_data[vito_index_publishing].value,
         vito_data[vito_index_publishing].name);
       vito_index_publishing = -1;
     }
