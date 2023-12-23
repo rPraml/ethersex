@@ -449,7 +449,7 @@ bool kaco_mqtt_publish(int i)
   char buf[128];
   uint8_t buf_length;
 
-  topic_length = snprintf_P(topic, 32, PSTR("tele/kaco_%d/value"), i + 1);
+  topic_length = snprintf_P(topic, 32, PSTR("tele/kaco_%d/json"), i + 1);
   topic[topic_length] = 0;
 
   buf_length = snprintf_P(buf, 128,

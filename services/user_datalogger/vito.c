@@ -234,6 +234,10 @@ const mqtt_callback_config_t vito_mqtt_callback_config PROGMEM = {
 };
 
 void vito_start(void) {
+  if (vito_index_publishing != -1) {
+    datalogger_setmode(DATALOGGER_STATE_IDLE);
+    return;
+  }
   int i = VITO_DATA_COUNT;
   ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
   {

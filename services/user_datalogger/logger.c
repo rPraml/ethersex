@@ -200,7 +200,7 @@ int16_t datalogger_mainloop(void) {
     power = ((uint32_t)3600 * 100 * CONF_MTICKS_PER_SEC) / power;
     LOGGER_DEBUG("Power:%ld\n", power);
     buf_length = snprintf_P(buf, 16, PSTR("%ld"), power);
-    mqtt_construct_publish_packet_P(PSTR("tele/gas-power/counter"), buf, buf_length, false);
+    mqtt_construct_publish_packet_P(PSTR("tele/gas-power/value"), buf, buf_length, false);
   }
 #endif
 
@@ -247,7 +247,7 @@ void logger_mqtt_poll_cb() {
   char buf[16];
   uint8_t buf_length;
   buf_length = snprintf_P(buf, 16, PSTR("%ld"), value);
-  mqtt_construct_publish_packet_P(PSTR("tele/gas/counter"), buf, buf_length, false);
+  mqtt_construct_publish_packet_P(PSTR("tele/gas/value"), buf, buf_length, false);
 }
 
 void datalogger_debug(void) {
