@@ -27,7 +27,7 @@
 
 #define CONVERT_FAIL 0
 #define CONVERT_OK 1
-/* Output des Zählers
+/* Output des Zï¿½hlers
 /ACE0\3k260V01.18
 "F.F(00)
 C.1(1126110052708491)
@@ -44,7 +44,7 @@ static uint8_t datalogger_rx_state;
 struct s0_status_t {
 	uint16_t errorFlag;	// Bedeutung unbekannt
 	uint16_t statusFlag;	// Bit 0 = Richtung, bit 1= Creep Flag
-	uint8_t online; // 1 = Zähler online
+	uint8_t online; // 1 = Zï¿½hler online
 	uint32_t energyFwd; // 100 Wh
 	uint32_t energyRev; // 100 Wh
 	int32_t watt;
@@ -106,19 +106,22 @@ s0logger_mqtt_publish(void) {
   char buf[128];
   uint8_t buf_length;
   int32_t kaco_pwr = 0;
+  int32_t goodwe_pwr = 0;
 #ifdef DATA_LOGGER_KACO    
    kaco_pwr = kaco_get_total_power();
+   goodwe_pwr = goodwe_get_total_power();
 #endif
   
   buf_length = snprintf_P(buf, 128, 
-    PSTR("{\"error\":%d,\"status\":%d,\"online\":%d,\"energyFwd\":%lu00,\"energyRev\":%lu00,\"power\":%ld,\"pvpower\":%ld}"),
+    PSTR("{\"error\":%d,\"status\":%d,\"online\":%d,\"energyFwd\":%lu00,\"energyRev\":%lu00,\"power\":%ld,\"pv1\":%ld,\"pv2\":%ld}"),
     s0_status.errorFlag,
     s0_status.statusFlag, 
     s0_status.online,
     s0_status.energyFwd, 
     s0_status.energyRev, 
     s0_status.watt,
-    kaco_pwr);
+    kaco_pwr,
+	goodwe_pwr);
   return mqtt_construct_publish_packet_P(PSTR("tele/s0/json"), buf, buf_length, false);
  
 }
@@ -191,7 +194,7 @@ int16_t s0_process_rx(uint8_t ch) {
 		break;
 
 	case 10:
-		// hier werden die Zeilen vom Zähler geparsed
+		// hier werden die Zeilen vom Zï¿½hler geparsed
 		
 		sscanf_P(line, PSTR("FF(%x)"), 	&s0_status.errorFlag);
 		sscanf_P(line, PSTR("C.5.0(%x)"), 	&s0_status.statusFlag);
@@ -220,6 +223,7 @@ int16_t
 s0_ecmd_status(char *cmd, char *output, uint16_t len) {
 	static uint8_t line;
     int32_t kaco_pwr;
+	int32_t goodwe_pwr;
 	//uint16_t watt;
 	if (cmd[0] != 23) {
 		cmd[0] = 23;
@@ -249,8 +253,9 @@ s0_ecmd_status(char *cmd, char *output, uint16_t len) {
 		return ECMD_AGAIN(len);
   case 2:
       kaco_pwr = kaco_get_total_power();
-      len = snprintf_P(output, len, PSTR("%10ld,%10ld"),
-          kaco_pwr, kaco_pwr + s0_status.watt);
+	  goodwe_pwr = goodwe_get_total_power();
+      len = snprintf_P(output, len, PSTR("%10ld,%10ld,%10ld"),
+          kaco_pwr, goodwe_pwr, kaco_pwr + goodwe_pwr + s0_status.watt);
 
 #endif
 		return ECMD_FINAL(len);

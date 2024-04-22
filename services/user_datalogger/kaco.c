@@ -81,6 +81,7 @@ typedef struct
   uint16_t hours_lo;
 
   uint16_t energy_today; // 800
+  uint8_t mqtt_pending : 1;
 } goodwe_t;
 
 static int kaco_id;
@@ -237,6 +238,7 @@ int16_t goodwe_process_rx(uint8_t ch)
                  goodwe_status.ac_l1_hz, goodwe_status.ac_l2_hz, goodwe_status.ac_l3_hz);
       KACO_DEBUG("STATE %d %d %d\n",
                  goodwe_status.power, goodwe_status.status, goodwe_status.temperature);
+      goodwe_status.mqtt_pending = 1;
     }
 
     return FINISH_OK;
@@ -250,6 +252,7 @@ void goodwe_process_rx_err(void)
 {
   KACO_DEBUG("Offline\n");
   goodwe_status.status = -2; // offline
+  goodwe_status.mqtt_pending = 1;
   //kaco_status[kaco_id - 1].mqtt_pending = 1;
 }
 
@@ -307,6 +310,14 @@ int32_t kaco_get_total_power()
     }
   }
   return total;
+}
+int32_t goodwe_get_total_power()
+{
+  if (goodwe_status.status != -2)
+  {
+    return goodwe_status.power;
+  }
+  return 0;
 }
 
 int16_t
@@ -466,6 +477,37 @@ bool kaco_mqtt_publish(int i)
 
   return mqtt_construct_publish_packet(topic, buf, buf_length, false);
 }
+
+bool goodwe_mqtt_publish()
+{
+  char buf[200];
+  uint8_t buf_length;
+
+
+  buf_length = snprintf_P(buf, 200,
+                          PSTR("{\"status\":%d,\"dc1u\":%d,\"dc2u\":%d,\"dc1i\":%d,\"dc2i\":%d,\"ac1u\":%d,\"ac2u\":%d,\"ac3u\":%d,\"ac1i\":%d,\"ac2i\":%d,\"ac3i\":%d,\"hz\":%d,\"p\":%d,\"t\":%d,\"e\":%d}"),
+                          goodwe_status.status,
+                          goodwe_status.pv1_u,
+                          goodwe_status.pv2_u,
+
+                          goodwe_status.pv1_i,
+                          goodwe_status.pv2_i, 
+                          
+                          goodwe_status.ac_l1_u, 
+                          goodwe_status.ac_l2_u, 
+                          goodwe_status.ac_l3_u, 
+                          
+                          goodwe_status.ac_l1_i, 
+                          goodwe_status.ac_l1_i, 
+                          goodwe_status.ac_l1_i,
+
+                          goodwe_status.ac_l1_hz,
+                          goodwe_status.power,
+                          goodwe_status.temperature,
+                          goodwe_status.energy_today);
+
+  return mqtt_construct_publish_packet_P(PSTR("tele/goodwe/json"), buf, buf_length, false);
+}
 #endif
 void kaco_mqtt_poll_cb(void)
 {
@@ -486,6 +528,20 @@ void kaco_mqtt_poll_cb(void)
         }
       }
     }
+  }
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
+  {
+    if (goodwe_status.mqtt_pending)
+      {
+        if (goodwe_mqtt_publish())
+        {
+          goodwe_status.mqtt_pending = 0;
+        }
+        else
+        {
+          return; // queue is full
+        }
+      }
   }
 #endif
 }

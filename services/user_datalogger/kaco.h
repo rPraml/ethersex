@@ -39,6 +39,7 @@ void kaco_init(void);
  * Returns the total AC power of all inverters
  */
 int32_t kaco_get_total_power();
+int32_t goodwe_get_total_power();
 
 /**
  * Ecmd function
