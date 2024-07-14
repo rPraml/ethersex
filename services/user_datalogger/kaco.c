@@ -125,7 +125,7 @@ int16_t kaco_process_rx(uint8_t ch)
   crc = 0;
   for (id = 1; id < 57; id++)
     crc += line[id];
-  if (sscanf_P(line, PSTR("\n*0%c0 %d %d.%d %d.%d %d %d.%d %d.%d %d %u %ld %c"),
+  if (sscanf_P(line, PSTR("\n*0%c0 %d %d.%d %d.%d %d %d.%d %d.%d %d %d %ld %c"),
                &id, &status,
                &pv_u_hi, &pv_u_lo, &pv_i_hi, &pv_i_lo, &pv_p,
                &ac_u_hi, &ac_u_lo, &ac_i_hi, &ac_i_lo, &ac_p,
@@ -156,6 +156,7 @@ int16_t kaco_process_rx(uint8_t ch)
     kaco_status[id].ac_p = ac_p;
     kaco_status[id].temp = temp;
     kaco_status[id].total = total;
+    kaco_status[kaco_id - 1].mqtt_pending = 1;
     KACO_DEBUG("%02d %s\n", kaco_id, line);
   }
   else
@@ -464,7 +465,7 @@ bool kaco_mqtt_publish(int i)
   topic[topic_length] = 0;
 
   buf_length = snprintf_P(buf, 128,
-                          PSTR("{\"status\":%d,\"pv_u\":%d,\"pv_i\":%ld,\"pv_p\":%d,\"ac_u\":%d,\"ac_i\":%ld,\"ac_p\":%d,\"temp\":%d,\"total\":%ld}"),
+                          PSTR("{\"status\":%d,\"pv_u\":%d,\"pv_i\":%d,\"pv_p\":%d,\"ac_u\":%d,\"ac_i\":%d,\"ac_p\":%d,\"temp\":%d,\"total\":%ld}"),
                           kaco_status[i].status,
                           kaco_status[i].pv_u,
                           kaco_status[i].pv_i,
@@ -474,7 +475,7 @@ bool kaco_mqtt_publish(int i)
                           kaco_status[i].ac_p,
                           kaco_status[i].temp,
                           kaco_status[i].total);
-
+  KACO_DEBUG("MQ:%i:%s\n", i, buf);
   return mqtt_construct_publish_packet(topic, buf, buf_length, false);
 }
 
@@ -518,8 +519,10 @@ void kaco_mqtt_poll_cb(void)
     {
       if (kaco_status[i].mqtt_pending)
       {
+        KACO_DEBUG("Pending %i\n", i);
         if (kaco_mqtt_publish(i))
         {
+          KACO_DEBUG("Pushed %i\n", i);
           kaco_status[i].mqtt_pending = 0;
         }
         else
