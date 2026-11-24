@@ -52,8 +52,8 @@
 #include "kaco.h"
 #endif
 
-
-
+volatile unsigned int timeout_counter;
+volatile uint8_t datalogger_state;
 
 static volatile uint32_t gas_counter = 0;
 static volatile uint32_t gas_counter_mqtt = 0;

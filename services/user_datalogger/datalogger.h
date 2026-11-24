@@ -53,9 +53,8 @@ datalogger_mainloop(void);
 #define DATALOGGER_STATE_IDLE 0
 
 
-volatile unsigned int timeout_counter;
-
-volatile uint8_t datalogger_state;
+extern volatile unsigned int timeout_counter;
+extern volatile uint8_t datalogger_state;
 
 void datalogger_setmode(uint8_t state);
 

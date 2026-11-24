@@ -45,6 +45,7 @@ int32_t goodwe_get_total_power();
  * Ecmd function
  */
 int16_t kaco_ecmd_status(char *cmd, char *output, uint16_t len);
+int16_t goodwe_ecmd_status(char *cmd, char *output, uint16_t len);
 
 void kaco_mainloop(void);
 

@@ -55,9 +55,12 @@ typedef struct
   uint8_t mqtt_pending : 1;
 } kaco_t;
 
+#define GOODWE_REGISTER_COUNT 22
+#define GOODWE_REGISTER_BYTES (GOODWE_REGISTER_COUNT * 2)
+
 typedef struct
 {
-  uint16_t pv1_u; // Reg 768
+  uint16_t pv1_u; // Reg 768 (0x0300)
   uint16_t pv2_u;
   uint16_t pv1_i;
   uint16_t pv2_i;
@@ -80,7 +83,6 @@ typedef struct
   uint16_t hours_hi;
   uint16_t hours_lo;
 
-  uint16_t energy_today; // 800
   uint8_t mqtt_pending : 1;
 } goodwe_t;
 
@@ -204,8 +206,13 @@ int16_t goodwe_process_rx(uint8_t ch)
   if (rx_pos == 2 && ch == 0x03)
     return CONTINUE;
 
-  if (rx_pos == 3 && ch < DATALOGGER_SCRATCH_SIZE - 5)
+  if (rx_pos == 3)
   {
+    if (ch != GOODWE_REGISTER_BYTES)
+    {
+      KACO_DEBUG("Unexpected register byte count %d\n", ch);
+      return FINISH_ERR;
+    }
     rx_len = ch;
     return CONTINUE;
   }
@@ -219,11 +226,18 @@ int16_t goodwe_process_rx(uint8_t ch)
   {
     uint16_t crc = modbus_crc_calc(datalogger_scratch, rx_len + 3);
     uint16_t rx_crc = datalogger_scratch[rx_pos - 1] << 8 | datalogger_scratch[rx_pos - 2];
-    if (crc == rx_crc)
+    if (crc != rx_crc)
+    {
+      KACO_DEBUG("CRC err\n");
+      return FINISH_ERR;
+    }
+
     {
       char *src = datalogger_scratch + 3;
-      char *dst = &goodwe_status;
-      for (crc = 0; crc < sizeof(goodwe_t); crc += 2)
+      char *dst = (char *)&goodwe_status;
+      // Copy only the 22 registers requested from 0x0300; struct padding and
+      // fields not present in this response must never be read from the CRC.
+      for (crc = 0; crc < GOODWE_REGISTER_BYTES; crc += 2)
       {
         dst[crc] = src[crc + 1];
         dst[crc + 1] = src[crc];
@@ -485,27 +499,47 @@ bool goodwe_mqtt_publish()
   uint8_t buf_length;
 
 
-  buf_length = snprintf_P(buf, 200,
-                          PSTR("{\"status\":%d,\"dc1u\":%d,\"dc2u\":%d,\"dc1i\":%d,\"dc2i\":%d,\"ac1u\":%d,\"ac2u\":%d,\"ac3u\":%d,\"ac1i\":%d,\"ac2i\":%d,\"ac3i\":%d,\"hz\":%d,\"p\":%d,\"t\":%d,\"e\":%d}"),
-                          goodwe_status.status,
-                          goodwe_status.pv1_u,
-                          goodwe_status.pv2_u,
-
-                          goodwe_status.pv1_i,
-                          goodwe_status.pv2_i, 
-                          
-                          goodwe_status.ac_l1_u, 
-                          goodwe_status.ac_l2_u, 
-                          goodwe_status.ac_l3_u, 
-                          
-                          goodwe_status.ac_l1_i, 
-                          goodwe_status.ac_l1_i, 
-                          goodwe_status.ac_l1_i,
-
-                          goodwe_status.ac_l1_hz,
-                          goodwe_status.power,
-                          goodwe_status.temperature,
-                          goodwe_status.energy_today);
+  uint32_t energy_total_dkwh = ((uint32_t)goodwe_status.energy_hi << 16) | goodwe_status.energy_lo;
+  if (energy_total_dkwh == 0xFFFFFFFFUL)
+  {
+    buf_length = snprintf_P(buf, sizeof(buf),
+                            PSTR("{\"status\":%d,\"dc1u\":%d,\"dc2u\":%d,\"dc1i\":%d,\"dc2i\":%d,\"ac1u\":%d,\"ac2u\":%d,\"ac3u\":%d,\"ac1i\":%d,\"ac2i\":%d,\"ac3i\":%d,\"hz\":%d,\"p\":%d,\"t\":%d,\"energy_total_kwh\":null}"),
+                            goodwe_status.status,
+                            goodwe_status.pv1_u,
+                            goodwe_status.pv2_u,
+                            goodwe_status.pv1_i,
+                            goodwe_status.pv2_i,
+                            goodwe_status.ac_l1_u,
+                            goodwe_status.ac_l2_u,
+                            goodwe_status.ac_l3_u,
+                            goodwe_status.ac_l1_i,
+                            goodwe_status.ac_l2_i,
+                            goodwe_status.ac_l3_i,
+                            goodwe_status.ac_l1_hz,
+                            goodwe_status.power,
+                            goodwe_status.temperature);
+  }
+  else
+  {
+    buf_length = snprintf_P(buf, sizeof(buf),
+                            PSTR("{\"status\":%d,\"dc1u\":%d,\"dc2u\":%d,\"dc1i\":%d,\"dc2i\":%d,\"ac1u\":%d,\"ac2u\":%d,\"ac3u\":%d,\"ac1i\":%d,\"ac2i\":%d,\"ac3i\":%d,\"hz\":%d,\"p\":%d,\"t\":%d,\"energy_total_kwh\":%lu.%01lu}"),
+                            goodwe_status.status,
+                            goodwe_status.pv1_u,
+                            goodwe_status.pv2_u,
+                            goodwe_status.pv1_i,
+                            goodwe_status.pv2_i,
+                            goodwe_status.ac_l1_u,
+                            goodwe_status.ac_l2_u,
+                            goodwe_status.ac_l3_u,
+                            goodwe_status.ac_l1_i,
+                            goodwe_status.ac_l2_i,
+                            goodwe_status.ac_l3_i,
+                            goodwe_status.ac_l1_hz,
+                            goodwe_status.power,
+                            goodwe_status.temperature,
+                            (unsigned long)(energy_total_dkwh / 10),
+                            (unsigned long)(energy_total_dkwh % 10));
+  }
 
   return mqtt_construct_publish_packet_P(PSTR("tele/goodwe/json"), buf, buf_length, false);
 }
